@@ -766,67 +766,93 @@ export default function Home() {
 
       {/* Step sequencer */}
       <Card className="p-0">
+
+        {/* ── Grid toolbar ── outside scroll, always fully visible ── */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-rim">
+
+          {/* Edit history */}
+          <Tooltip content="Undo last edit — shortcut: Ctrl+Z">
+            <button
+              type="button"
+              onClick={undo}
+              disabled={!canUndo}
+              className="h-7 px-2.5 flex items-center gap-1 rounded text-xs font-medium transition-colors text-ink-dim hover:text-ink hover:bg-well disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Undo"
+            >
+              <span aria-hidden="true">↩</span> Undo
+            </button>
+          </Tooltip>
+          <Tooltip content="Redo — shortcut: Ctrl+Y">
+            <button
+              type="button"
+              onClick={redo}
+              disabled={!canRedo}
+              className="h-7 px-2.5 flex items-center gap-1 rounded text-xs font-medium transition-colors text-ink-dim hover:text-ink hover:bg-well disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Redo"
+            >
+              <span aria-hidden="true">↪</span> Redo
+            </button>
+          </Tooltip>
+
+          {/* Divider */}
+          <div className="h-4 w-px bg-rim shrink-0" aria-hidden="true" />
+
+          <Tooltip content="Erase all steps — your tracks, samples, and settings are kept">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="h-7 px-2.5 flex items-center gap-1 rounded text-xs font-medium transition-colors text-ink-dim hover:text-rose-400 hover:bg-well"
+              aria-label="Clear all steps"
+            >
+              <span aria-hidden="true">✕</span> Clear steps
+            </button>
+          </Tooltip>
+
+          {/* Push loop range to the right */}
+          <div className="flex-1" />
+
+          {/* Loop range toggle */}
+          <Tooltip content={loopRange
+            ? `Only steps ${loopRange[0] + 1}–${loopRange[1] + 1} will play. Click step numbers below to drag the range. Click Loop again to turn off.`
+            : "Loop range — make only a portion of steps play, great for testing one bar at a time"}>
+            <button
+              type="button"
+              onClick={() => setLoopRange(loopRange
+                ? null
+                : [0, Math.min(7, pattern.stepCount - 1)])}
+              className={`h-7 px-3 flex items-center gap-1.5 rounded text-xs font-semibold transition-colors ${
+                loopRange
+                  ? "text-indigo-300 bg-indigo-500/20 hover:bg-indigo-500/30 ring-1 ring-indigo-500/40"
+                  : "text-ink-dim hover:text-ink hover:bg-well"
+              }`}
+              aria-pressed={!!loopRange}
+              aria-label={loopRange ? `Loop range active: steps ${loopRange[0]+1}–${loopRange[1]+1}, click to clear` : "Turn on loop range"}
+            >
+              <span aria-hidden="true">⟳</span>
+              {loopRange
+                ? `Loop: ${loopRange[0] + 1}–${loopRange[1] + 1}`
+                : "Loop range"}
+            </button>
+          </Tooltip>
+        </div>
+
+        {/* Loop active hint */}
+        {loopRange && (
+          <div className="px-3 py-1.5 flex items-center gap-2 bg-indigo-500/5 border-b border-indigo-500/20 text-xs text-indigo-400">
+            <span aria-hidden="true">💡</span>
+            Playing steps <strong>{loopRange[0] + 1}–{loopRange[1] + 1}</strong> only.
+            Click any step number below to move the loop edges.
+          </div>
+        )}
+
         <div className="overflow-x-auto">
         <div className="min-w-[700px]">
           {/* Step number header */}
-          <div className="flex items-center gap-3 px-2 py-2 border-b border-rim">
+          <div className="flex items-center gap-3 px-2 py-1.5 border-b border-rim">
             {/* Spacer that matches the drag handle column (hidden on mobile like the handle) */}
             <div className="hidden sm:block w-5 shrink-0" aria-hidden="true" />
-            <div className="w-48 min-w-48 sm:w-60 sm:min-w-60 shrink-0 flex items-center gap-1 flex-wrap">
-              {/* Undo / Redo */}
-              <Tooltip content="Undo (Ctrl+Z)">
-                <button
-                  type="button"
-                  onClick={undo}
-                  disabled={!canUndo}
-                  className="h-6 px-2 flex items-center justify-center rounded text-ink-ghost hover:text-ink hover:bg-well text-xs transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Undo"
-                >
-                  ↩
-                </button>
-              </Tooltip>
-              <Tooltip content="Redo (Ctrl+Y)">
-                <button
-                  type="button"
-                  onClick={redo}
-                  disabled={!canRedo}
-                  className="h-6 px-2 flex items-center justify-center rounded text-ink-ghost hover:text-ink hover:bg-well text-xs transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Redo"
-                >
-                  ↪
-                </button>
-              </Tooltip>
-              <Tooltip content="Clear all steps (keeps tracks and settings)">
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="h-6 px-2 flex items-center justify-center rounded text-ink-ghost hover:text-rose-400 hover:bg-well text-xs transition-colors"
-                  aria-label="Reset all steps"
-                >
-                  ⦲ Reset
-                </button>
-              </Tooltip>
-              {/* Loop range toggle */}
-              <Tooltip content={loopRange
-                ? `Loop ${loopRange[0] + 1}–${loopRange[1] + 1} — click step numbers to adjust ends · click again to clear`
-                : "Loop range — constrain playback to a subset of steps"}>
-                <button
-                  type="button"
-                  onClick={() => setLoopRange(loopRange
-                    ? null
-                    : [0, Math.min(7, pattern.stepCount - 1)])}
-                  className={`h-6 px-2 flex items-center justify-center rounded text-xs font-mono transition-colors ${
-                    loopRange
-                      ? "text-indigo-400 bg-indigo-500/15 hover:bg-indigo-500/25"
-                      : "text-ink-ghost hover:text-ink hover:bg-well"
-                  }`}
-                  aria-pressed={!!loopRange}
-                  aria-label={loopRange ? `Clear loop range (${loopRange[0]+1}–${loopRange[1]+1})` : "Set loop range"}
-                >
-                  {loopRange ? `⟳ ${loopRange[0]+1}–${loopRange[1]+1}` : "⟳"}
-                </button>
-              </Tooltip>
-            </div>
+            {/* Spacer matching track controls column */}
+            <div className="w-48 min-w-48 sm:w-60 sm:min-w-60 shrink-0" aria-hidden="true" />
             <div className="flex gap-1">
               {Array.from({ length: pattern.stepCount }, (_, i) => (
                 <React.Fragment key={i}>

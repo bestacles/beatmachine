@@ -5,7 +5,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { type Pattern } from "@/lib/pattern";
 import { saveSession, loadSessions, deleteSession, getSessionPattern, exportPatternJson, type SavedSession } from "@/lib/session";
 import { exportPatternMidi } from "@/lib/audio/midiExport";
-import { buildShareLink } from "@/lib/pattern";
+import { buildShareLink, deserializePattern } from "@/lib/pattern";
 
 interface SessionMenuProps {
   pattern: Pattern;
@@ -54,7 +54,8 @@ export function SessionMenu({ pattern, onLoad }: SessionMenuProps) {
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
       try {
-        const p = JSON.parse(text) as Pattern;
+        // Use deserializePattern for back-compat + validation (same as session load)
+        const p = deserializePattern(text);
         onLoad(p);
       } catch {
         alert("Invalid session file");

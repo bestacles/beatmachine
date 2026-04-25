@@ -127,6 +127,9 @@ export default function Home() {
     const saved = loadAutoSave();
     if (saved) {
       setPatternSlots(saved);
+      // Don't carry over any undo history from a previous session
+      undoStackRef.current = [];
+      redoStackRef.current = [];
     }
   }, []);
 
@@ -337,6 +340,9 @@ export default function Home() {
         velocity: count > t.velocity.length
           ? [...t.velocity, ...Array(count - t.velocity.length).fill(1)]
           : t.velocity.slice(0, count),
+        probability: count > (t.probability?.length ?? 0)
+          ? [...(t.probability ?? []), ...Array(count - (t.probability?.length ?? 0)).fill(1)]
+          : (t.probability ?? Array(count).fill(1)).slice(0, count),
       })),
     }));
     // Clamp loop range to new step count
@@ -393,9 +399,10 @@ export default function Home() {
       ...prev,
       tracks: prev.tracks.map((t) => ({
         ...t,
-        steps: Array(prev.stepCount).fill(false) as boolean[],
-        notes: Array(prev.stepCount).fill(null),
-        velocity: Array(prev.stepCount).fill(1) as number[],
+        steps:       Array(prev.stepCount).fill(false) as boolean[],
+        notes:       Array(prev.stepCount).fill(null),
+        velocity:    Array(prev.stepCount).fill(1) as number[],
+        probability: Array(prev.stepCount).fill(1) as number[],
       })),
     }));
   }
@@ -964,7 +971,14 @@ export default function Home() {
           <RecordPanel getMediaStream={() => getEngine().getMediaStream()} />
         </Card>
         <Card>
-          <SessionMenu pattern={pattern} onLoad={setPattern} />
+          <SessionMenu pattern={pattern} onLoad={(p) => {
+            setPattern(p);
+            setLoopRange(null);
+            undoStackRef.current = [];
+            redoStackRef.current = [];
+            setCanUndo(false);
+            setCanRedo(false);
+          }} />
         </Card>
       </div>
 

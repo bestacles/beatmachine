@@ -73,6 +73,13 @@ export function deserializePattern(data: string): Pattern {
     const raw = parsed as unknown as Record<string, unknown>;
     if (typeof raw.swing !== "number") raw.swing = 0;
     if (typeof raw.humanize !== "number") raw.humanize = 0;
+    // Back-compat: stepCount may be missing from sessions saved before the field was added;
+    // infer it from the actual length of the first track's steps array.
+    if (typeof raw.stepCount !== "number" || ![8, 16, 32, 64].includes(raw.stepCount as number)) {
+      const firstTrack = (raw.tracks as Array<Record<string, unknown>>)?.[0];
+      const len = Array.isArray(firstTrack?.steps) ? (firstTrack.steps as unknown[]).length : 16;
+      raw.stepCount = ([8, 16, 32, 64] as number[]).includes(len) ? len : 16;
+    }
     // Back-compat: ensure each track has type + notes fields
     if (Array.isArray(raw.tracks)) {
       raw.tracks = (raw.tracks as Array<Record<string, unknown>>).map((t) => ({

@@ -61,55 +61,60 @@ export function SessionMenu({ pattern, onLoad }: SessionMenuProps) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex items-center gap-1">
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-3">Session</p>
+
+      {/* Save row */}
+      <div className="flex items-center gap-2 flex-wrap mb-3">
         <input
           type="text"
-          placeholder="Session name"
+          placeholder="Session name…"
           value={saveName}
           onChange={(e) => setSaveName(e.target.value)}
-          className="rounded bg-zinc-800 border border-zinc-700 px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-28"
+          onKeyDown={(e) => e.key === "Enter" && handleSave()}
+          className="rounded-lg bg-zinc-800 border border-zinc-700 px-2.5 py-1 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-36 placeholder:text-zinc-600"
           aria-label="Session name"
         />
-        <Button variant="secondary" size="sm" onClick={handleSave}>
-          Save
+        <Button variant="secondary" size="sm" onClick={handleSave}>Save</Button>
+        <Button variant="secondary" size="sm" onClick={() => setShowSessions(!showSessions)}>
+          {showSessions ? "Hide" : "Load"} ({sessions.length})
         </Button>
       </div>
-      <Button variant="secondary" size="sm" onClick={() => setShowSessions(!showSessions)}>
-        Load ({sessions.length})
-      </Button>
-      <Button variant="secondary" size="sm" onClick={handleShare}>
-        Share Link
-      </Button>
-      <Button variant="ghost" size="sm" onClick={() => exportPatternJson(pattern)}>
-        Export JSON
-      </Button>
-      <label className="cursor-pointer">
-        <span className="inline-flex items-center justify-center rounded px-2 py-1 text-xs font-medium bg-zinc-700 text-white hover:bg-zinc-600 transition-colors">
-          Import JSON
-        </span>
-        <input type="file" accept=".json" className="hidden" onChange={handleImport} aria-label="Import JSON session file" />
-      </label>
+
+      {/* Action row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button variant="ghost" size="sm" onClick={handleShare}>Share Link</Button>
+        <Button variant="ghost" size="sm" onClick={() => exportPatternJson(pattern)}>Export JSON</Button>
+        <label className="cursor-pointer">
+          <span className="inline-flex items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors">
+            Import JSON
+          </span>
+          <input type="file" accept=".json" className="hidden" onChange={handleImport} aria-label="Import JSON session file" />
+        </label>
+      </div>
+
       {shareLink && (
-        <p className="w-full text-xs text-indigo-400 break-all" aria-live="polite">
-          Link copied! {shareLink.slice(0, 60)}…
+        <p className="mt-2 text-xs text-indigo-400 break-all" aria-live="polite">
+          Copied! {shareLink.slice(0, 60)}…
         </p>
       )}
-      {showSessions && sessions.length > 0 && (
-        <div className="w-full rounded bg-zinc-800 border border-zinc-700 p-2 mt-1">
-          {sessions.map((s) => (
-            <div key={s.id} className="flex items-center justify-between py-1 border-b border-zinc-700 last:border-0">
-              <span className="text-xs text-zinc-300">{s.name}</span>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" onClick={() => handleLoad(s)}>Load</Button>
-                <Button variant="danger" size="sm" onClick={() => handleDelete(s.id)}>✕</Button>
+
+      {showSessions && (
+        <div className="mt-3 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden">
+          {sessions.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-zinc-500">No saved sessions yet.</p>
+          ) : (
+            sessions.map((s) => (
+              <div key={s.id} className="flex items-center justify-between px-3 py-2 border-b border-zinc-700 last:border-0">
+                <span className="text-xs text-zinc-300 truncate flex-1 mr-2">{s.name}</span>
+                <div className="flex gap-1 shrink-0">
+                  <Button variant="ghost" size="sm" onClick={() => handleLoad(s)}>Load</Button>
+                  <Button variant="danger" size="sm" onClick={() => handleDelete(s.id)}>✕</Button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
-      )}
-      {showSessions && sessions.length === 0 && (
-        <p className="w-full text-xs text-zinc-500">No saved sessions yet.</p>
       )}
     </div>
   );

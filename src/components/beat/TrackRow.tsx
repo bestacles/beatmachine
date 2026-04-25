@@ -4,7 +4,6 @@ import { type TrackState } from "@/lib/pattern";
 import { SampleSelect } from "./SampleSelect";
 import { StepGrid } from "./StepGrid";
 import { Toggle } from "@/components/ui/Toggle";
-import { Slider } from "@/components/ui/Slider";
 
 interface TrackRowProps {
   track: TrackState;
@@ -30,43 +29,36 @@ export function TrackRow({
   onToggleSolo,
 }: TrackRowProps) {
   return (
-    <div className="flex items-center gap-2 py-1">
-      <div className="flex items-center gap-1 w-56 min-w-56 shrink-0">
-        <span className="text-xs text-zinc-500 w-4">{trackIndex + 1}</span>
-        <SampleSelect
-          value={track.sampleId}
-          trackIndex={trackIndex}
-          onChange={onChangeSample}
-        />
-        <Toggle
-          pressed={track.mute}
-          onToggle={onToggleMute}
-          label="M"
-          variant="mute"
-        />
-        <Toggle
-          pressed={track.solo}
-          onToggle={onToggleSolo}
-          label="S"
-          variant="solo"
-        />
-        <Slider
-          id={`vol-track-${trackIndex}`}
-          min={0}
-          max={1}
-          step={0.01}
-          value={track.vol}
-          onChange={(e) => onChangeVol(parseFloat(e.target.value))}
-          className="w-16"
-          aria-label={`Track ${trackIndex + 1} volume`}
-        />
+    <div className={`flex items-center gap-3 px-2 py-1.5 rounded-lg transition-opacity ${track.mute ? "opacity-40" : ""}`}>
+      {/* Track controls */}
+      <div className="flex items-center gap-2 w-52 min-w-52 shrink-0">
+        <span className="text-xs font-mono text-zinc-600 w-4 text-right shrink-0">{trackIndex + 1}</span>
+        <SampleSelect value={track.sampleId} trackIndex={trackIndex} onChange={onChangeSample} />
+        <Toggle pressed={track.mute} onToggle={onToggleMute} label="M" variant="mute" />
+        <Toggle pressed={track.solo} onToggle={onToggleSolo} label="S" variant="solo" />
       </div>
+
+      {/* Step grid */}
       <StepGrid
         steps={track.steps}
         currentStep={isPlaying ? currentStep : null}
         trackIndex={trackIndex}
         onToggle={onToggleStep}
       />
+
+      {/* Per-track volume */}
+      <div className="w-16 shrink-0">
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={track.vol}
+          onChange={(e) => onChangeVol(parseFloat(e.target.value))}
+          className="w-full accent-indigo-500 cursor-pointer"
+          aria-label={`Track ${trackIndex + 1} volume`}
+        />
+      </div>
     </div>
   );
 }

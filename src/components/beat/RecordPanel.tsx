@@ -38,37 +38,41 @@ export function RecordPanel({ getMediaStream }: RecordPanelProps) {
   }
 
   return (
-    <div className="flex items-center gap-2" aria-live="polite">
-      <span className="text-xs text-zinc-400">Record:</span>
-      {([10, 20, 30] as const).map((d) => (
-        <button
-          key={d}
-          type="button"
-          onClick={() => setDuration(d)}
-          className={`rounded px-2 py-0.5 text-xs font-medium ${
-            duration === d
-              ? "bg-indigo-600 text-white"
-              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-          }`}
-          aria-pressed={duration === d}
-          aria-label={`Record ${d} seconds`}
+    <div aria-live="polite">
+      <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-3">Record</p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1 rounded-lg bg-zinc-800 border border-zinc-700 p-0.5">
+          {([10, 20, 30] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDuration(d)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                duration === d
+                  ? "bg-indigo-600 text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              aria-pressed={duration === d}
+              aria-label={`Record ${d} seconds`}
+            >
+              {d}s
+            </button>
+          ))}
+        </div>
+        <Button
+          variant={isRecording ? "danger" : "secondary"}
+          size="sm"
+          onClick={handleRecord}
+          aria-label={isRecording ? "Stop recording" : `Start recording ${duration} seconds`}
         >
-          {d}s
-        </button>
-      ))}
-      <Button
-        variant={isRecording ? "danger" : "secondary"}
-        size="sm"
-        onClick={handleRecord}
-        aria-label={isRecording ? "Stop recording" : `Start recording ${duration} seconds`}
-      >
-        {isRecording ? "⏹ Stop" : "⏺ Rec"}
-      </Button>
-      {isRecording && (
-        <span className="text-xs text-red-400 animate-pulse" role="status">
-          ● Recording…
-        </span>
-      )}
+          {isRecording ? "⏹ Stop" : "⏺ Rec"}
+        </Button>
+        {isRecording && (
+          <span className="text-xs text-red-400 animate-pulse" role="status">
+            ● Recording…
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -12,10 +12,10 @@ interface StepGridProps {
 
 export function StepGrid({ steps, currentStep, trackIndex, onToggle, disabled }: StepGridProps) {
   return (
-    <div className="flex gap-0.5 overflow-x-auto" role="group" aria-label={`Track ${trackIndex + 1} steps`}>
+    <div className="flex gap-1 overflow-x-auto" role="group" aria-label={`Track ${trackIndex + 1} steps`}>
       {steps.map((active, i) => (
         <React.Fragment key={i}>
-          {i > 0 && i % 4 === 0 && <div className="w-1" aria-hidden="true" />}
+          {i > 0 && i % 4 === 0 && <div className="w-1.5 shrink-0" aria-hidden="true" />}
           <button
             type="button"
             aria-pressed={active}
@@ -23,12 +23,13 @@ export function StepGrid({ steps, currentStep, trackIndex, onToggle, disabled }:
             onClick={() => onToggle(i)}
             disabled={disabled}
             className={cn(
-              "h-8 w-8 min-w-8 rounded-sm border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400",
+              "h-8 w-8 min-w-8 shrink-0 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900",
               active
-                ? "bg-indigo-500 border-indigo-400 hover:bg-indigo-400"
-                : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700",
-              currentStep === i && "ring-2 ring-white ring-offset-1 ring-offset-zinc-900",
-              disabled && "opacity-60 cursor-not-allowed"
+                ? "bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.4)] hover:bg-indigo-400"
+                : "bg-zinc-800 hover:bg-zinc-700 border border-zinc-700",
+              currentStep === i && active && "ring-2 ring-white/70 ring-offset-1 ring-offset-zinc-900",
+              currentStep === i && !active && "bg-zinc-700",
+              disabled && "opacity-50 cursor-not-allowed"
             )}
           />
         </React.Fragment>

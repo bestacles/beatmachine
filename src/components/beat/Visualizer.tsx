@@ -1,6 +1,5 @@
 "use client";
 import React, { useRef, useEffect } from "react";
-import { Button } from "@/components/ui/Button";
 
 interface VisualizerProps {
   analyser: AnalyserNode | null;
@@ -85,23 +84,26 @@ export function Visualizer({ analyser, mode, onToggleMode, isPlaying }: Visualiz
   }, [isPlaying]);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <canvas
-          ref={canvasRef}
-          width={600}
-          height={80}
-          className="w-full rounded bg-zinc-950 border border-zinc-800"
-          aria-hidden="true"
-        />
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-zinc-500" aria-live="polite">
-          Visualizer: {mode === "waveform" ? "Waveform" : "Frequency Bars"}
+    <div>
+      <canvas
+        ref={canvasRef}
+        width={800}
+        height={80}
+        className="w-full block"
+        aria-label="Audio visualizer"
+      />
+      <div className="flex items-center justify-between px-4 py-2 border-t border-zinc-800">
+        <span className="text-xs text-zinc-500">
+          {mode === "waveform" ? "Waveform" : "Frequency Bars"}
         </span>
-        <Button variant="ghost" size="sm" onClick={onToggleMode} aria-label="Toggle visualizer mode">
-          {mode === "waveform" ? "Switch to Bars" : "Switch to Waveform"}
-        </Button>
+        <button
+          type="button"
+          onClick={onToggleMode}
+          aria-label="Toggle visualizer mode"
+          className="text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
+        >
+          Switch to {mode === "waveform" ? "Bars" : "Waveform"}
+        </button>
       </div>
     </div>
   );

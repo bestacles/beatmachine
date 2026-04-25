@@ -15,14 +15,14 @@ export function Toggle({ pressed, onToggle, label, className, variant = "default
       type="button"
       role="switch"
       aria-checked={pressed}
-      aria-label={label}
+      aria-label={label === "M" ? "Mute track" : label === "S" ? "Solo track" : label}
       onClick={onToggle}
       className={cn(
-        "rounded px-1.5 py-0.5 text-xs font-semibold transition-colors",
-        !pressed && "bg-zinc-700 text-zinc-400 hover:bg-zinc-600",
-        pressed && variant === "mute" && "bg-red-600 text-white",
-        pressed && variant === "solo" && "bg-yellow-500 text-black",
-        pressed && variant === "default" && "bg-indigo-600 text-white",
+        "rounded px-1.5 py-0.5 text-xs font-bold tracking-wide transition-colors",
+        !pressed && "bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 border border-zinc-700",
+        pressed && variant === "mute" && "bg-red-600 text-white border border-red-500",
+        pressed && variant === "solo" && "bg-yellow-400 text-zinc-900 border border-yellow-300",
+        pressed && variant === "default" && "bg-indigo-600 text-white border border-indigo-500",
         className
       )}
     >

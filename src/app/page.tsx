@@ -139,8 +139,10 @@ export default function Home() {
   }
 
   return (
-    <Container className="py-4">
-      <Card className="mb-4">
+    <Container className="py-6 space-y-4">
+
+      {/* Transport */}
+      <Card>
         <Transport
           isPlaying={isPlaying}
           bpm={pattern.bpm}
@@ -151,7 +153,8 @@ export default function Home() {
         />
       </Card>
 
-      <Card className="mb-4">
+      {/* Visualizer */}
+      <Card className="p-0 overflow-hidden">
         <Visualizer
           analyser={analyser}
           mode={vizMode}
@@ -160,8 +163,26 @@ export default function Home() {
         />
       </Card>
 
-      <Card className="mb-4 overflow-x-auto">
-        <div className="min-w-[640px]">
+      {/* Step sequencer */}
+      <Card className="overflow-x-auto p-0">
+        <div className="min-w-[700px]">
+          {/* Step number header */}
+          <div className="flex items-center gap-3 px-2 py-2 border-b border-zinc-800">
+            <div className="w-52 min-w-52 shrink-0" />
+            <div className="flex gap-1">
+              {Array.from({ length: pattern.tracks[0]?.steps.length ?? 16 }, (_, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && i % 4 === 0 && <div className="w-1.5 shrink-0" aria-hidden="true" />}
+                  <div className="w-8 min-w-8 shrink-0 text-center text-[10px] font-mono text-zinc-700">
+                    {i + 1}
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+            <div className="w-16 shrink-0" />
+          </div>
+
+          {/* Track rows */}
           {pattern.tracks.map((track, i) => (
             <TrackRow
               key={track.id}
@@ -179,17 +200,19 @@ export default function Home() {
         </div>
       </Card>
 
-      <Card className="mb-4">
-        <RecordPanel getMediaStream={() => getEngine().getMediaStream()} />
-      </Card>
-
-      <Card>
-        <SessionMenu pattern={pattern} onLoad={setPattern} />
-      </Card>
+      {/* Record + Session side by side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <RecordPanel getMediaStream={() => getEngine().getMediaStream()} />
+        </Card>
+        <Card>
+          <SessionMenu pattern={pattern} onLoad={setPattern} />
+        </Card>
+      </div>
 
       {!initialized && (
-        <p className="mt-4 text-center text-xs text-zinc-500">
-          Click Play (or press Space) to start the audio engine.
+        <p className="text-center text-xs text-zinc-600 pb-2">
+          Press <kbd className="rounded bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 font-mono text-zinc-400">Space</kbd> or click Play to start the audio engine.
         </p>
       )}
     </Container>

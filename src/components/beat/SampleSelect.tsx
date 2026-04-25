@@ -13,7 +13,6 @@ export function SampleSelect({ value, trackIndex, onChange }: SampleSelectProps)
   return (
     <Select
       id={`sample-track-${trackIndex}`}
-      label="Sample:"
       value={value}
       options={SAMPLES.map((s) => ({ value: s.id, label: s.label }))}
       onChange={(e) => onChange(e.target.value)}

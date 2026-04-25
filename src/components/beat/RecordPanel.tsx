@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { Recorder, downloadBlob } from "@/lib/audio/recorder";
 
 interface RecordPanelProps {
@@ -43,30 +44,33 @@ export function RecordPanel({ getMediaStream }: RecordPanelProps) {
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex items-center gap-1 rounded-lg bg-well border border-rim p-0.5">
           {([10, 20, 30] as const).map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDuration(d)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                duration === d
-                  ? "bg-indigo-600 text-white"
-                  : "text-ink-dim hover:text-ink"
-              }`}
-              aria-pressed={duration === d}
-              aria-label={`Record ${d} seconds`}
-            >
-              {d}s
-            </button>
+            <Tooltip key={d} content={`Record ${d} seconds then auto-download`}>
+              <button
+                type="button"
+                onClick={() => setDuration(d)}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  duration === d
+                    ? "bg-indigo-600 text-white"
+                    : "text-ink-dim hover:text-ink"
+                }`}
+                aria-pressed={duration === d}
+                aria-label={`Record ${d} seconds`}
+              >
+                {d}s
+              </button>
+            </Tooltip>
           ))}
         </div>
-        <Button
-          variant={isRecording ? "danger" : "secondary"}
-          size="sm"
-          onClick={handleRecord}
-          aria-label={isRecording ? "Stop recording" : `Start recording ${duration} seconds`}
-        >
-          {isRecording ? "⏹ Stop" : "⏺ Rec"}
-        </Button>
+        <Tooltip content={isRecording ? "Stop recording" : "Record audio output as a .webm file"}>
+          <Button
+            variant={isRecording ? "danger" : "secondary"}
+            size="sm"
+            onClick={handleRecord}
+            aria-label={isRecording ? "Stop recording" : `Start recording ${duration} seconds`}
+          >
+            {isRecording ? "⏹ Stop" : "⏺ Rec"}
+          </Button>
+        </Tooltip>
         {isRecording && (
           <span className="text-xs text-red-400 animate-pulse" role="status">
             ● Recording…

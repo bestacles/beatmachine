@@ -1,7 +1,8 @@
 "use client";
 import React, { useRef, useEffect } from "react";
+import { Tooltip } from "@/components/ui/Tooltip";
 
-type VizMode = "waveform" | "bars" | "circle";
+type VizMode = "waveform" | "bars" | "circle" | "spectrum";
 
 interface VisualizerProps {
   analyser: AnalyserNode | null;
@@ -32,6 +33,14 @@ const MODE_LABELS: Record<VizMode, string> = {
   waveform: "Wave",
   bars:     "Bars",
   circle:   "Circle",
+  spectrum: "Spectrum",
+};
+
+const MODE_TIPS: Record<VizMode, string> = {
+  waveform: "Waveform — time-domain oscilloscope view",
+  bars:     "Bars — FFT frequency spectrum",
+  circle:   "Circle — polar oscilloscope",
+  spectrum: "Spectrum — Bass / Mid / High frequency bands",
 };
 
 export function Visualizer({ analyser, mode, onSetMode, isPlaying }: VisualizerProps) {
@@ -196,11 +205,75 @@ export function Visualizer({ analyser, mode, onSetMode, isPlaying }: VisualizerP
       ctx.stroke(path);
     }
 
+    function drawSpectrum() {
+      analyser!.getByteFrequencyData(dataArray);
+      const { bg } = getThemeColors();
+      const dark = document.documentElement.classList.contains("dark");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      const sampleRate = analyser!.context.sampleRate;
+      const binHz = sampleRate / analyser!.fftSize;
+      const labelH = 18;
+      const drawH = H - labelH;
+
+      const bands = [
+        { label: "BASS",  maxHz: 300,   color0: "#f43f5e", color1: "#fb7185" },
+        { label: "MID",   maxHz: 3000,  color0: "#f97316", color1: "#fdba74" },
+        { label: "HIGH",  maxHz: 16000, color0: "#3b82f6", color1: "#818cf8" },
+      ];
+
+      // How many bins cover 0–16 kHz
+      const maxBin = Math.min(bufferLen, Math.ceil(16000 / binHz));
+      const gap  = 1;
+      const barW = Math.max(2, (W - gap * (maxBin - 1)) / maxBin);
+
+      for (let i = 0; i < maxBin; i++) {
+        const freqHz = i * binHz;
+        const band = freqHz < 300 ? bands[0] : freqHz < 3000 ? bands[1] : bands[2];
+        const norm = dataArray[i] / 255;
+        const barH = norm * drawH * 0.95;
+        const x = i * (barW + gap);
+        const g = ctx.createLinearGradient(0, drawH, 0, drawH - barH);
+        g.addColorStop(0, band.color0 + "77");
+        g.addColorStop(1, band.color1);
+        ctx.fillStyle = g;
+        ctx.fillRect(x, drawH - barH, barW, Math.max(barH, 1));
+      }
+
+      // Band dividers + labels
+      ctx.font = "bold 9px monospace";
+      ctx.textBaseline = "bottom";
+      for (let b = 0; b < bands.length; b++) {
+        const startHz = b === 0 ? 0 : bands[b - 1].maxHz;
+        const endHz   = bands[b].maxHz;
+        const startX  = Math.floor(startHz / binHz) * (barW + gap);
+        const endX    = Math.min(Math.floor(endHz / binHz) * (barW + gap), W);
+        const midX    = (startX + endX) / 2;
+
+        ctx.fillStyle = dark ? "#71717a" : "#6b7280";
+        ctx.textAlign = "center";
+        ctx.fillText(bands[b].label, midX, H);
+
+        if (b > 0) {
+          ctx.strokeStyle = dark ? "#3f3f46" : "#d1d5db";
+          ctx.lineWidth = 0.5;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(startX, 0);
+          ctx.lineTo(startX, drawH);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
     function frame() {
       rafRef.current = requestAnimationFrame(frame);
-      if (mode === "waveform") drawWaveform();
-      else if (mode === "bars")  drawBars();
-      else                       drawCircle();
+      if      (mode === "waveform") drawWaveform();
+      else if (mode === "bars")     drawBars();
+      else if (mode === "circle")   drawCircle();
+      else                          drawSpectrum();
     }
 
     frame();
@@ -221,20 +294,21 @@ export function Visualizer({ analyser, mode, onSetMode, isPlaying }: VisualizerP
       <div className="flex items-center justify-between px-4 py-2 border-t border-rim">
         <span className="text-xs text-ink-dim">{MODE_LABELS[mode]}</span>
         <div className="flex gap-0.5 rounded-lg bg-well border border-rim p-0.5">
-          {(["waveform", "bars", "circle"] as VizMode[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => onSetMode(m)}
-              aria-pressed={mode === m}
-              className={`rounded-md px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                mode === m
-                  ? "bg-indigo-600 text-white"
-                  : "text-ink-dim hover:text-indigo-400"
-              }`}
-            >
-              {MODE_LABELS[m]}
-            </button>
+          {(["waveform", "bars", "circle", "spectrum"] as VizMode[]).map((m) => (
+            <Tooltip key={m} content={MODE_TIPS[m]}>
+              <button
+                type="button"
+                onClick={() => onSetMode(m)}
+                aria-pressed={mode === m}
+                className={`rounded-md px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                  mode === m
+                    ? "bg-indigo-600 text-white"
+                    : "text-ink-dim hover:text-indigo-400"
+                }`}
+              >
+                {MODE_LABELS[m]}
+              </button>
+            </Tooltip>
           ))}
         </div>
       </div>

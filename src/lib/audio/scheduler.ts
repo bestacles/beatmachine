@@ -16,6 +16,8 @@ export interface SchedulerOptions {
   audioContext: AudioContext;
   getBpm: () => number;
   getStepCount: () => number;
+  /** 0 = straight, 100 = max swing (~triplet 2:1 ratio) */
+  getSwing: () => number;
   onStep: (step: number, time: number) => void;
 }
 
@@ -23,6 +25,7 @@ export class Scheduler {
   private audioContext: AudioContext;
   private getBpm: () => number;
   private getStepCount: () => number;
+  private getSwing: () => number;
   private onStep: (step: number, time: number) => void;
   private currentStep = 0;
   private nextNoteTime = 0;
@@ -34,6 +37,7 @@ export class Scheduler {
     this.audioContext = options.audioContext;
     this.getBpm = options.getBpm;
     this.getStepCount = options.getStepCount;
+    this.getSwing = options.getSwing;
     this.onStep = options.onStep;
   }
 
@@ -53,7 +57,12 @@ export class Scheduler {
   private tick() {
     while (this.nextNoteTime < this.audioContext.currentTime + this.scheduleAheadTime) {
       this.onStep(this.currentStep, this.nextNoteTime);
-      this.nextNoteTime += stepDurationSec(this.getBpm());
+      const stepDur = stepDurationSec(this.getBpm());
+      // Swing: offset odd steps so even steps are longer, odd steps shorter
+      // swingAmt=0 → straight; swingAmt=0.33 → 2:1 triplet feel
+      const swingAmt = (this.getSwing() / 100) * 0.33;
+      const isEven = this.currentStep % 2 === 0;
+      this.nextNoteTime += stepDur * (isEven ? 1 + swingAmt : 1 - swingAmt);
       this.currentStep = (this.currentStep + 1) % this.getStepCount();
     }
   }

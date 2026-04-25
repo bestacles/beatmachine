@@ -7,7 +7,7 @@ export function Header() {
       <div className="flex items-center gap-3">
         <span className="text-2xl leading-none" aria-hidden="true">🥁</span>
         <span className="text-sm font-bold tracking-tight">
-          Beat<span className="text-indigo-400">Machine</span>
+          Groove<span className="text-indigo-400">Weaver</span>
         </span>
       </div>
       <nav className="flex items-center gap-1">

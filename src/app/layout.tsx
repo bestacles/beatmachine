@@ -4,8 +4,8 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
-  title: "BeatMachine – Browser Beat Maker",
-  description: "A browser-based beatbox / music maker built with Web Audio API",
+  title: "GrooveWeaver – Browser Beat Maker",
+  description: "A browser-based step sequencer and groove machine built with Web Audio API",
 };
 
 // Anti-FOUC: runs synchronously before first paint to apply stored theme.

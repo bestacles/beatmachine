@@ -10,18 +10,48 @@ import { RecordPanel } from "@/components/beat/RecordPanel";
 import { getEngine } from "@/lib/audio/engine";
 import { Scheduler } from "@/lib/audio/scheduler";
 import { createDefaultPattern, decodeShareUrl, type Pattern, type TrackState } from "@/lib/pattern";
-import { clamp } from "@/lib/utils";
+import { clamp, TRACK_COLORS } from "@/lib/utils";
+import { PianoKeyboard } from "@/components/beat/PianoKeyboard";
+import { MidiPanel } from "@/components/beat/MidiPanel";
+import { noteFrequency, type NoteName, type ScaleName } from "@/lib/scales";
+import { sendDrumNote, sendMelodicNote } from "@/lib/audio/midi";
 
 export default function Home() {
-  const [pattern, setPattern] = useState<Pattern>(createDefaultPattern());
+  // Pattern A / B slots
+  const [patternSlots, setPatternSlots] = useState<[Pattern, Pattern]>(() => [
+    createDefaultPattern(),
+    createDefaultPattern(),
+  ]);
+  const [activeSlot, setActiveSlot] = useState<0 | 1>(0);
+  const pattern = patternSlots[activeSlot];
+
+  const setPattern = useCallback(
+    (update: Pattern | ((prev: Pattern) => Pattern)) => {
+      setPatternSlots((prev) => {
+        const current = prev[activeSlot];
+        const next = typeof update === "function" ? update(current) : update;
+        return activeSlot === 0 ? [next, prev[1]] : [prev[0], next];
+      });
+    },
+    [activeSlot],
+  );
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState<number | null>(null);
-  const [vizMode, setVizMode] = useState<"waveform" | "bars" | "circle">("waveform");
+  const [vizMode, setVizMode] = useState<"waveform" | "bars" | "circle" | "spectrum">("waveform");
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  const schedulerRef = useRef<Scheduler | null>(null);
-  const patternRef = useRef<Pattern>(pattern);
+  // Piano / keyboard state
+  const [pianoRoot,   setPianoRoot]   = useState<NoteName>("C");
+  const [pianoScale,  setPianoScale]  = useState<ScaleName>("major");
+  const [pianoOctave, setPianoOctave] = useState(3);
+
+  const schedulerRef    = useRef<Scheduler | null>(null);
+  const patternRef      = useRef<Pattern>(pattern);
+  const tapTimesRef     = useRef<number[]>([]);
+  const midiAccessRef   = useRef<MIDIAccess | null>(null);
+  const midiOutputIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     patternRef.current = pattern;
@@ -70,6 +100,9 @@ export default function Home() {
       if (hasSolo && !track.solo) return;
       if (track.steps[step]) {
         engine.playBuffer(track.sampleId, track.id, time);
+        if (midiAccessRef.current && midiOutputIdRef.current) {
+          sendDrumNote(midiAccessRef.current, midiOutputIdRef.current, track.sampleId);
+        }
       }
     });
   }, []);
@@ -90,6 +123,7 @@ export default function Home() {
         audioContext: ctx,
         getBpm: () => patternRef.current.bpm,
         getStepCount: () => patternRef.current.stepCount,
+        getSwing: () => patternRef.current.swing,
         onStep,
       });
       schedulerRef.current = scheduler;
@@ -139,7 +173,7 @@ export default function Home() {
     updateTrack(trackIndex, (t) => ({ ...t, solo: !t.solo }));
   }
 
-  function handleStepCountChange(count: 16 | 32) {
+  function handleStepCountChange(count: 8 | 16 | 32 | 64) {
     setPattern((prev) => ({
       ...prev,
       stepCount: count,
@@ -152,6 +186,67 @@ export default function Home() {
     }));
   }
 
+  function handleTapTempo() {
+    const now = performance.now();
+    const recent = [...tapTimesRef.current.filter((t) => now - t < 3000), now];
+    tapTimesRef.current = recent;
+    if (recent.length >= 2) {
+      const intervals = recent.slice(1).map((t, i) => t - recent[i]);
+      const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      handleBpmChange(Math.round(60000 / avgMs));
+    }
+  }
+
+  function handleClearTrack(trackIndex: number) {
+    updateTrack(trackIndex, (t) => ({ ...t, steps: t.steps.map(() => false) }));
+  }
+
+  function handleRandomizeTrack(trackIndex: number) {
+    updateTrack(trackIndex, (t) => ({ ...t, steps: t.steps.map(() => Math.random() < 0.3) }));
+  }
+
+  function handleSwingChange(swing: number) {
+    setPattern((prev) => ({ ...prev, swing: clamp(swing, 0, 100) }));
+  }
+
+  function handleSlotChange(slot: 0 | 1) {
+    setActiveSlot(slot);
+  }
+
+  async function handlePlayNote(midi: number) {
+    await initEngine();
+    const engine = getEngine();
+    await engine.resume();
+    engine.playTone(noteFrequency(midi), 0.8, 1.5);
+    if (midiAccessRef.current && midiOutputIdRef.current) {
+      sendMelodicNote(midiAccessRef.current, midiOutputIdRef.current, midi, 90, 500);
+    }
+  }
+
+  async function handlePlayChord(midiNotes: number[]) {
+    await initEngine();
+    const engine = getEngine();
+    await engine.resume();
+    for (const midi of midiNotes) {
+      engine.playTone(noteFrequency(midi), 0.6, 2.0);
+    }
+    if (midiAccessRef.current && midiOutputIdRef.current) {
+      for (const midi of midiNotes) {
+        sendMelodicNote(midiAccessRef.current, midiOutputIdRef.current, midi, 80, 600);
+      }
+    }
+  }
+
+  function handleMidiReady(access: MIDIAccess, outputId: string) {
+    midiAccessRef.current   = access;
+    midiOutputIdRef.current = outputId;
+  }
+
+  function handleMidiCleared() {
+    midiAccessRef.current   = null;
+    midiOutputIdRef.current = null;
+  }
+
   return (
     <Container className="py-6 space-y-4">
 
@@ -162,10 +257,15 @@ export default function Home() {
           bpm={pattern.bpm}
           masterVol={pattern.masterVol}
           stepCount={pattern.stepCount}
+          swing={pattern.swing}
+          activeSlot={activeSlot}
           onTogglePlay={handleTogglePlay}
           onBpmChange={handleBpmChange}
           onMasterVolChange={handleMasterVolChange}
           onStepCountChange={handleStepCountChange}
+          onTapTempo={handleTapTempo}
+          onSwingChange={handleSwingChange}
+          onSlotChange={handleSlotChange}
         />
       </Card>
 
@@ -208,23 +308,46 @@ export default function Home() {
               trackIndex={i}
               currentStep={currentStep}
               isPlaying={isPlaying}
+              trackColor={TRACK_COLORS[i % TRACK_COLORS.length]}
               onToggleStep={(step) => handleToggleStep(i, step)}
               onChangeSample={(sampleId) => handleChangeSample(i, sampleId)}
               onChangeVol={(vol) => handleChangeVol(i, vol)}
               onToggleMute={() => handleToggleMute(i)}
               onToggleSolo={() => handleToggleSolo(i)}
+              onClear={() => handleClearTrack(i)}
+              onRandomize={() => handleRandomizeTrack(i)}
             />
           ))}
         </div>
       </Card>
 
-      {/* Record + Session side by side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Piano / Keyboard */}
+      <Card>
+        <PianoKeyboard
+          root={pianoRoot}
+          scale={pianoScale}
+          octave={pianoOctave}
+          onRootChange={setPianoRoot}
+          onScaleChange={setPianoScale}
+          onOctaveChange={setPianoOctave}
+          onPlayNote={handlePlayNote}
+          onPlayChord={handlePlayChord}
+        />
+      </Card>
+
+      {/* Record + Session + MIDI */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <RecordPanel getMediaStream={() => getEngine().getMediaStream()} />
         </Card>
         <Card>
           <SessionMenu pattern={pattern} onLoad={setPattern} />
+        </Card>
+        <Card>
+          <MidiPanel
+            onAccessReady={handleMidiReady}
+            onAccessCleared={handleMidiCleared}
+          />
         </Card>
       </div>
 

@@ -8,9 +8,12 @@ interface StepGridProps {
   trackIndex: number;
   onToggle: (step: number) => void;
   disabled?: boolean;
+  trackColor?: string;
 }
 
-export function StepGrid({ steps, currentStep, trackIndex, onToggle, disabled }: StepGridProps) {
+export function StepGrid({ steps, currentStep, trackIndex, onToggle, disabled, trackColor }: StepGridProps) {
+  const activeColor = trackColor ?? "#6366f1";
+  const activeGlow  = `${activeColor}55`;
   return (
     <div className="flex gap-1 overflow-x-auto" role="group" aria-label={`Track ${trackIndex + 1} steps`}>
       {steps.map((active, i) => (
@@ -22,10 +25,11 @@ export function StepGrid({ steps, currentStep, trackIndex, onToggle, disabled }:
             aria-label={`Track ${trackIndex + 1} step ${i + 1}`}
             onClick={() => onToggle(i)}
             disabled={disabled}
+            style={active ? { backgroundColor: activeColor, boxShadow: `0 0 7px 1px ${activeGlow}` } : undefined}
             className={cn(
-              "h-8 w-8 min-w-8 shrink-0 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900",
+              "h-8 w-8 min-w-8 shrink-0 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900",
               active
-                ? "bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.4)] hover:bg-indigo-400"
+                ? "hover:brightness-110"
                 : "bg-well hover:bg-rim border border-rim",
               currentStep === i && active && "ring-2 ring-white/70 ring-offset-1 ring-offset-zinc-900",
               currentStep === i && !active && "bg-rim",

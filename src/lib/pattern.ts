@@ -12,7 +12,9 @@ export interface TrackState {
 export interface Pattern {
   bpm: number;
   masterVol: number;
-  stepCount: 16 | 32;
+  stepCount: 8 | 16 | 32 | 64;
+  /** 0 = straight, 100 = max swing (~2:1 triplet feel) */
+  swing: number;
   tracks: TrackState[];
 }
 
@@ -26,6 +28,7 @@ export function createDefaultPattern(): Pattern {
     bpm: 120,
     masterVol: 0.8,
     stepCount: 16,
+    swing: 0,
     tracks: Array.from({ length: TRACK_COUNT }, (_, i) => ({
       id: `track-${i}`,
       sampleId: DEFAULT_SAMPLES[i] ?? "kick",
@@ -45,7 +48,10 @@ export function deserializePattern(data: string): Pattern {
   try {
     const parsed = JSON.parse(data) as unknown;
     if (!isPattern(parsed)) return createDefaultPattern();
-    return parsed;
+    // Back-compat: fill in fields added after initial release
+    const raw = parsed as unknown as Record<string, unknown>;
+    if (typeof raw.swing !== "number") raw.swing = 0;
+    return raw as unknown as Pattern;
   } catch {
     return createDefaultPattern();
   }

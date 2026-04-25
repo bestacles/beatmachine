@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { type Pattern } from "@/lib/pattern";
 import { saveSession, loadSessions, deleteSession, getSessionPattern, exportPatternJson, type SavedSession } from "@/lib/session";
 import { buildShareLink } from "@/lib/pattern";
@@ -75,22 +76,32 @@ export function SessionMenu({ pattern, onLoad }: SessionMenuProps) {
           className="rounded-lg bg-well border border-rim px-2.5 py-1 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-36 placeholder:text-ink-ghost"
           aria-label="Session name"
         />
-        <Button variant="secondary" size="sm" onClick={handleSave}>Save</Button>
-        <Button variant="secondary" size="sm" onClick={() => setShowSessions(!showSessions)}>
-          {showSessions ? "Hide" : "Load"} ({sessions.length})
-        </Button>
+        <Tooltip content="Save current pattern to browser storage">
+          <Button variant="secondary" size="sm" onClick={handleSave}>Save</Button>
+        </Tooltip>
+        <Tooltip content="Browse and load previously saved sessions">
+          <Button variant="secondary" size="sm" onClick={() => setShowSessions(!showSessions)}>
+            {showSessions ? "Hide" : "Load"} ({sessions.length})
+          </Button>
+        </Tooltip>
       </div>
 
       {/* Action row */}
       <div className="flex items-center gap-2 flex-wrap">
-        <Button variant="ghost" size="sm" onClick={handleShare}>Share Link</Button>
-        <Button variant="ghost" size="sm" onClick={() => exportPatternJson(pattern)}>Export JSON</Button>
-        <label className="cursor-pointer">
-          <span className="inline-flex items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium text-ink-dim hover:text-ink hover:bg-well transition-colors">
-            Import JSON
-          </span>
-          <input type="file" accept=".json" className="hidden" onChange={handleImport} aria-label="Import JSON session file" />
-        </label>
+        <Tooltip content="Generate shareable URL — pattern is encoded and copied to clipboard">
+          <Button variant="ghost" size="sm" onClick={handleShare}>Share Link</Button>
+        </Tooltip>
+        <Tooltip content="Download the current pattern as a .json file">
+          <Button variant="ghost" size="sm" onClick={() => exportPatternJson(pattern)}>Export JSON</Button>
+        </Tooltip>
+        <Tooltip content="Load a pattern from a .json file">
+          <label className="cursor-pointer">
+            <span className="inline-flex items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium text-ink-dim hover:text-ink hover:bg-well transition-colors">
+              Import JSON
+            </span>
+            <input type="file" accept=".json" className="hidden" onChange={handleImport} aria-label="Import JSON session file" />
+          </label>
+        </Tooltip>
       </div>
 
       {shareLink && (

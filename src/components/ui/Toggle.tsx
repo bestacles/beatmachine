@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "./Tooltip";
 
 interface ToggleProps {
   pressed: boolean;
@@ -7,10 +8,11 @@ interface ToggleProps {
   label: string;
   className?: string;
   variant?: "mute" | "solo" | "default";
+  tooltip?: string;
 }
 
-export function Toggle({ pressed, onToggle, label, className, variant = "default" }: ToggleProps) {
-  return (
+export function Toggle({ pressed, onToggle, label, className, variant = "default", tooltip }: ToggleProps) {
+  const btn = (
     <button
       type="button"
       role="switch"
@@ -29,4 +31,6 @@ export function Toggle({ pressed, onToggle, label, className, variant = "default
       {label}
     </button>
   );
+  if (!tooltip) return btn;
+  return <Tooltip content={tooltip}>{btn}</Tooltip>;
 }

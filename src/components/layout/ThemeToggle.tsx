@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export function ThemeToggle() {
   const [dark, setDark] = useState<boolean | null>(null);
@@ -17,13 +18,15 @@ export function ThemeToggle() {
   }
 
   return (
-    <button
-      onClick={toggle}
-      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-      className="rounded-md p-1.5 text-ink-dim hover:text-ink hover:bg-well transition-colors"
-      suppressHydrationWarning
-    >
-      {dark === null ? null : dark ? "☀️" : "🌙"}
-    </button>
+    <Tooltip content={dark ? "Switch to light mode" : "Switch to dark mode"} position="bottom">
+      <button
+        onClick={toggle}
+        aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+        className="rounded-md p-1.5 text-ink-dim hover:text-ink hover:bg-well transition-colors"
+        suppressHydrationWarning
+      >
+        {dark === null ? null : dark ? "☀️" : "🌙"}
+      </button>
+    </Tooltip>
   );
 }

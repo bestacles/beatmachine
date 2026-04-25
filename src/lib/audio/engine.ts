@@ -85,6 +85,45 @@ export class AudioEngine {
     source.start(time);
   }
 
+  /**
+   * Synthesise a piano-like tone and route it through the master gain / analyser.
+   * velocity: 0-1, duration in seconds.
+   */
+  playTone(freq: number, velocity: number, duration: number): void {
+    if (!this.context || !this.masterGain || !this.initialized) return;
+    const ctx = this.context;
+    const now = ctx.currentTime;
+
+    const env = ctx.createGain();
+    env.connect(this.masterGain);
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(velocity * 0.7, now + 0.01);
+    env.gain.exponentialRampToValueAtTime(velocity * 0.3, now + 0.15);
+    env.gain.setValueAtTime(velocity * 0.3, now + Math.max(duration - 0.2, 0.05));
+    env.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    env.gain.setValueAtTime(0, now + duration + 0.01);
+
+    const partials: Array<{ ratio: number; gain: number; type: OscillatorType }> = [
+      { ratio: 1, gain: 1.00, type: "triangle" },
+      { ratio: 2, gain: 0.50, type: "sine" },
+      { ratio: 3, gain: 0.25, type: "sine" },
+      { ratio: 4, gain: 0.12, type: "sine" },
+      { ratio: 5, gain: 0.06, type: "sine" },
+    ];
+
+    for (const { ratio, gain, type } of partials) {
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq * ratio;
+      oscGain.gain.value = gain;
+      osc.connect(oscGain);
+      oscGain.connect(env);
+      osc.start(now);
+      osc.stop(now + duration + 0.05);
+    }
+  }
+
   isInitialized(): boolean {
     return this.initialized;
   }

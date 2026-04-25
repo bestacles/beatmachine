@@ -5,12 +5,14 @@ interface TransportProps {
   isPlaying: boolean;
   bpm: number;
   masterVol: number;
+  stepCount: 16 | 32;
   onTogglePlay: () => void;
   onBpmChange: (bpm: number) => void;
   onMasterVolChange: (vol: number) => void;
+  onStepCountChange: (count: 16 | 32) => void;
 }
 
-export function Transport({ isPlaying, bpm, masterVol, onTogglePlay, onBpmChange, onMasterVolChange }: TransportProps) {
+export function Transport({ isPlaying, bpm, masterVol, stepCount, onTogglePlay, onBpmChange, onMasterVolChange, onStepCountChange }: TransportProps) {
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
       {/* Play / Pause */}
@@ -18,7 +20,7 @@ export function Transport({ isPlaying, bpm, masterVol, onTogglePlay, onBpmChange
         type="button"
         onClick={onTogglePlay}
         aria-label={isPlaying ? "Pause" : "Play"}
-        className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 text-white ${
+        className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas text-white ${
           isPlaying
             ? "bg-red-600 hover:bg-red-500 focus-visible:ring-red-500"
             : "bg-indigo-600 hover:bg-indigo-500 focus-visible:ring-indigo-500"
@@ -28,11 +30,11 @@ export function Transport({ isPlaying, bpm, masterVol, onTogglePlay, onBpmChange
         {isPlaying ? "Pause" : "Play"}
       </button>
 
-      <div className="hidden sm:block h-8 w-px bg-zinc-700" aria-hidden="true" />
+      <div className="hidden sm:block h-8 w-px bg-rim" aria-hidden="true" />
 
       {/* BPM */}
       <div className="flex items-center gap-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">BPM</span>
+        <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">BPM</span>
         <input
           id="bpm-number"
           type="number"
@@ -40,7 +42,7 @@ export function Transport({ isPlaying, bpm, masterVol, onTogglePlay, onBpmChange
           max={200}
           value={bpm}
           onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) onBpmChange(v); }}
-          className="w-14 rounded-lg bg-zinc-800 border border-zinc-700 px-2 py-1 text-sm font-mono text-zinc-100 text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+          className="w-14 rounded-lg bg-well border border-rim px-2 py-1 text-sm font-mono text-ink text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
           aria-label="BPM value"
         />
         <input
@@ -55,11 +57,11 @@ export function Transport({ isPlaying, bpm, masterVol, onTogglePlay, onBpmChange
         />
       </div>
 
-      <div className="hidden sm:block h-8 w-px bg-zinc-700" aria-hidden="true" />
+      <div className="hidden sm:block h-8 w-px bg-rim" aria-hidden="true" />
 
       {/* Master Volume */}
       <div className="flex items-center gap-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-zinc-500">Vol</span>
+        <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">Vol</span>
         <input
           type="range"
           id="master-vol"
@@ -71,7 +73,31 @@ export function Transport({ isPlaying, bpm, masterVol, onTogglePlay, onBpmChange
           className="w-28 accent-indigo-500 cursor-pointer"
           aria-label="Master volume"
         />
-        <span className="text-xs font-mono text-zinc-500 w-8 shrink-0">{Math.round(masterVol * 100)}%</span>
+        <span className="text-xs font-mono text-ink-dim w-8 shrink-0">{Math.round(masterVol * 100)}%</span>
+      </div>
+
+      <div className="hidden sm:block h-8 w-px bg-rim" aria-hidden="true" />
+
+      {/* Step count */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">Steps</span>
+        <div className="flex items-center rounded-lg bg-well border border-rim p-0.5">
+          {([16, 32] as const).map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onStepCountChange(n)}
+              aria-pressed={stepCount === n}
+              className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
+                stepCount === n
+                  ? "bg-indigo-600 text-white"
+                  : "text-ink-dim hover:text-ink"
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

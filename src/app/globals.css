@@ -1,13 +1,34 @@
 @import "tailwindcss";
 
-@variant dark (&:where(.dark, .dark *));
+/* ── Semantic design tokens ──────────────────────────────────────── */
+@theme {
+  /* Light mode defaults */
+  --color-canvas:     #f9fafb;   /* page background   */
+  --color-panel:      #ffffff;   /* card background   */
+  --color-well:       #f3f4f6;   /* input / raised bg */
+  --color-rim:        #e5e7eb;   /* borders           */
+  --color-ink:        #09090b;   /* primary text      */
+  --color-ink-dim:    #6b7280;   /* secondary text    */
+  --color-ink-ghost:  #d1d5db;   /* tertiary text     */
+}
 
-html {
+/* Dark mode overrides when .dark is on <html> */
+.dark {
   color-scheme: dark;
+  --color-canvas:     #09090b;
+  --color-panel:      #18181b;
+  --color-well:       #27272a;
+  --color-rim:        #27272a;
+  --color-ink:        #f4f4f5;
+  --color-ink-dim:    #71717a;
+  --color-ink-ghost:  #3f3f46;
 }
 
 body {
-  @apply bg-zinc-950 text-zinc-100 min-h-screen antialiased;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -20,13 +41,13 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #18181b;
+  background: var(--color-canvas);
 }
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--color-well);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--color-rim);
 }
 

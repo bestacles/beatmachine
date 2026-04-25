@@ -12,6 +12,7 @@ export interface TrackState {
 export interface Pattern {
   bpm: number;
   masterVol: number;
+  stepCount: 16 | 32;
   tracks: TrackState[];
 }
 
@@ -24,6 +25,7 @@ export function createDefaultPattern(): Pattern {
   return {
     bpm: 120,
     masterVol: 0.8,
+    stepCount: 16,
     tracks: Array.from({ length: TRACK_COUNT }, (_, i) => ({
       id: `track-${i}`,
       sampleId: DEFAULT_SAMPLES[i] ?? "kick",

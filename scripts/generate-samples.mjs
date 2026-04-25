@@ -177,6 +177,140 @@ function generateSynth() {
   return samples;
 }
 
+function generateOpenHat() {
+  const dur = 0.35;
+  const n = Math.round(SAMPLE_RATE * dur);
+  const samples = new Float32Array(n);
+  const adsr = env(0.001, 0.02, 0.4, 0.33, n);
+  let seed = 456;
+  let prev = 0;
+  for (let i = 0; i < n; i++) {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    const noise = ((seed >>> 0) / 0xffffffff) * 2 - 1;
+    const hp = noise - prev * 0.85;
+    prev = noise;
+    samples[i] = hp * adsr(i) * 0.6;
+  }
+  return samples;
+}
+
+function generateRimshot() {
+  const dur = 0.12;
+  const n = Math.round(SAMPLE_RATE * dur);
+  const samples = new Float32Array(n);
+  let seed = 789;
+  for (let i = 0; i < n; i++) {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    const noise = ((seed >>> 0) / 0xffffffff) * 2 - 1;
+    const t = i / SAMPLE_RATE;
+    const click = Math.sin(2 * Math.PI * 1200 * t) * Math.exp(-t * 80);
+    const body = noise * Math.exp(-t * 40) * 0.4;
+    samples[i] = (click + body) * 0.9;
+  }
+  return samples;
+}
+
+function generateShaker() {
+  const dur = 0.08;
+  const n = Math.round(SAMPLE_RATE * dur);
+  const samples = new Float32Array(n);
+  const adsr = env(0.001, 0.01, 0.1, 0.07, n);
+  let seed = 321;
+  let prev1 = 0, prev2 = 0;
+  for (let i = 0; i < n; i++) {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    const noise = ((seed >>> 0) / 0xffffffff) * 2 - 1;
+    const hp1 = noise - prev1;
+    const hp2 = hp1 - prev2;
+    prev1 = noise; prev2 = hp1;
+    samples[i] = hp2 * adsr(i) * 0.55;
+  }
+  return samples;
+}
+
+function generateCowbell() {
+  const dur = 0.6;
+  const n = Math.round(SAMPLE_RATE * dur);
+  const samples = new Float32Array(n);
+  const adsr = env(0.001, 0.02, 0.3, 0.58, n);
+  for (let i = 0; i < n; i++) {
+    const t = i / SAMPLE_RATE;
+    const v = Math.sin(2 * Math.PI * 562 * t) * 0.6
+      + Math.sin(2 * Math.PI * 845 * t) * 0.4;
+    const ring = Math.sin(2 * Math.PI * 3370 * t) * 0.15 * Math.exp(-t * 8);
+    samples[i] = (v + ring) * adsr(i) * 0.7;
+  }
+  return samples;
+}
+
+function generateSub() {
+  const dur = 0.7;
+  const n = Math.round(SAMPLE_RATE * dur);
+  const samples = new Float32Array(n);
+  const adsr = env(0.003, 0.04, 0.0, 0.66, n);
+  let phase = 0;
+  for (let i = 0; i < n; i++) {
+    const freq = 55 * Math.exp(-i / SAMPLE_RATE * 6) + 40;
+    phase += (2 * Math.PI * freq) / SAMPLE_RATE;
+    samples[i] = Math.sin(phase) * adsr(i) * 0.95;
+  }
+  return samples;
+}
+
+function generateChord() {
+  const dur = 0.5;
+  const n = Math.round(SAMPLE_RATE * dur);
+  const samples = new Float32Array(n);
+  const adsr = env(0.005, 0.04, 0.5, 0.45, n);
+  const freqs = [261.63, 329.63, 392.0]; // C4, E4, G4
+  for (let i = 0; i < n; i++) {
+    const t = i / SAMPLE_RATE;
+    let v = 0;
+    for (const f of freqs) {
+      let s = 0;
+      for (let h = 1; h <= 4; h++) s += Math.sin(2 * Math.PI * f * h * t) / h;
+      v += (2 / Math.PI) * s;
+    }
+    samples[i] = (v / freqs.length) * adsr(i) * 0.5;
+  }
+  return samples;
+}
+
+function generateFx() {
+  const dur = 0.5;
+  const n = Math.round(SAMPLE_RATE * dur);
+  const samples = new Float32Array(n);
+  let seed = 999;
+  for (let i = 0; i < n; i++) {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    const noise = ((seed >>> 0) / 0xffffffff) * 2 - 1;
+    const t = i / SAMPLE_RATE;
+    const sweep = Math.sin(2 * Math.PI * (200 + t * 1800) * t);
+    const env1 = Math.exp(-t * 4) * (1 - Math.exp(-t * 30));
+    samples[i] = (sweep * 0.6 + noise * 0.4) * env1 * 0.8;
+  }
+  return samples;
+}
+
+function generateRide() {
+  const dur = 0.8;
+  const n = Math.round(SAMPLE_RATE * dur);
+  const samples = new Float32Array(n);
+  const adsr = env(0.001, 0.03, 0.5, 0.77, n);
+  let seed = 777;
+  let prev = 0;
+  for (let i = 0; i < n; i++) {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    const noise = ((seed >>> 0) / 0xffffffff) * 2 - 1;
+    const hp = noise - prev * 0.7;
+    prev = noise;
+    const t = i / SAMPLE_RATE;
+    const tone = Math.sin(2 * Math.PI * 3400 * t) * 0.2 * Math.exp(-t * 5);
+    samples[i] = (hp * 0.8 + tone) * adsr(i) * 0.55;
+  }
+  return samples;
+}
+
 const generators = [
   ["kick.wav", generateKick],
   ["snare.wav", generateSnare],
@@ -186,6 +320,14 @@ const generators = [
   ["perc.wav", generatePerc],
   ["bass.wav", generateBass],
   ["synth.wav", generateSynth],
+  ["open-hat.wav", generateOpenHat],
+  ["rimshot.wav", generateRimshot],
+  ["shaker.wav", generateShaker],
+  ["cowbell.wav", generateCowbell],
+  ["sub.wav", generateSub],
+  ["chord.wav", generateChord],
+  ["fx.wav", generateFx],
+  ["ride.wav", generateRide],
 ];
 
 for (const [filename, gen] of generators) {

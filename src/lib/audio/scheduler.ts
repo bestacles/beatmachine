@@ -15,12 +15,14 @@ export function advanceStep(step: number): number {
 export interface SchedulerOptions {
   audioContext: AudioContext;
   getBpm: () => number;
+  getStepCount: () => number;
   onStep: (step: number, time: number) => void;
 }
 
 export class Scheduler {
   private audioContext: AudioContext;
   private getBpm: () => number;
+  private getStepCount: () => number;
   private onStep: (step: number, time: number) => void;
   private currentStep = 0;
   private nextNoteTime = 0;
@@ -31,6 +33,7 @@ export class Scheduler {
   constructor(options: SchedulerOptions) {
     this.audioContext = options.audioContext;
     this.getBpm = options.getBpm;
+    this.getStepCount = options.getStepCount;
     this.onStep = options.onStep;
   }
 
@@ -51,7 +54,7 @@ export class Scheduler {
     while (this.nextNoteTime < this.audioContext.currentTime + this.scheduleAheadTime) {
       this.onStep(this.currentStep, this.nextNoteTime);
       this.nextNoteTime += stepDurationSec(this.getBpm());
-      this.currentStep = advanceStep(this.currentStep);
+      this.currentStep = (this.currentStep + 1) % this.getStepCount();
     }
   }
 }

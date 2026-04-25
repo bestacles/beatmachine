@@ -32,7 +32,7 @@ export function TrackRow({
     <div className={`flex items-center gap-3 px-2 py-1.5 rounded-lg transition-opacity ${track.mute ? "opacity-40" : ""}`}>
       {/* Track controls */}
       <div className="flex items-center gap-2 w-52 min-w-52 shrink-0">
-        <span className="text-xs font-mono text-zinc-600 w-4 text-right shrink-0">{trackIndex + 1}</span>
+        <span className="text-xs font-mono text-ink-ghost w-4 text-right shrink-0">{trackIndex + 1}</span>
         <SampleSelect value={track.sampleId} trackIndex={trackIndex} onChange={onChangeSample} />
         <Toggle pressed={track.mute} onToggle={onToggleMute} label="M" variant="mute" />
         <Toggle pressed={track.solo} onToggle={onToggleSolo} label="S" variant="solo" />

@@ -8,9 +8,20 @@ export const metadata: Metadata = {
   description: "A browser-based beatbox / music maker built with Web Audio API",
 };
 
+// Anti-FOUC: runs synchronously before first paint to apply stored theme.
+const themeScript = `(function(){
+  var t=localStorage.getItem('theme');
+  var d=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if(t==='dark'||(!t&&d)||!t){document.documentElement.classList.add('dark');}
+})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="flex flex-col min-h-screen">
         <Header />
         <main className="flex-1">{children}</main>

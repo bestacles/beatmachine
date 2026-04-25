@@ -19,7 +19,7 @@ export function Toggle({ pressed, onToggle, label, className, variant = "default
       onClick={onToggle}
       className={cn(
         "rounded px-1.5 py-0.5 text-xs font-bold tracking-wide transition-colors",
-        !pressed && "bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300 border border-zinc-700",
+        !pressed && "bg-well text-ink-dim hover:bg-rim hover:text-ink border border-rim",
         pressed && variant === "mute" && "bg-red-600 text-white border border-red-500",
         pressed && variant === "solo" && "bg-yellow-400 text-zinc-900 border border-yellow-300",
         pressed && variant === "default" && "bg-indigo-600 text-white border border-indigo-500",

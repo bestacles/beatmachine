@@ -16,7 +16,7 @@ export default function Home() {
   const [pattern, setPattern] = useState<Pattern>(createDefaultPattern());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState<number | null>(null);
-  const [vizMode, setVizMode] = useState<"waveform" | "bars">("waveform");
+  const [vizMode, setVizMode] = useState<"waveform" | "bars" | "circle">("waveform");
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -89,6 +89,7 @@ export default function Home() {
       const scheduler = new Scheduler({
         audioContext: ctx,
         getBpm: () => patternRef.current.bpm,
+        getStepCount: () => patternRef.current.stepCount,
         onStep,
       });
       schedulerRef.current = scheduler;
@@ -138,6 +139,19 @@ export default function Home() {
     updateTrack(trackIndex, (t) => ({ ...t, solo: !t.solo }));
   }
 
+  function handleStepCountChange(count: 16 | 32) {
+    setPattern((prev) => ({
+      ...prev,
+      stepCount: count,
+      tracks: prev.tracks.map((t) => ({
+        ...t,
+        steps: count > t.steps.length
+          ? [...t.steps, ...Array(count - t.steps.length).fill(false)]
+          : t.steps.slice(0, count),
+      })),
+    }));
+  }
+
   return (
     <Container className="py-6 space-y-4">
 
@@ -147,9 +161,11 @@ export default function Home() {
           isPlaying={isPlaying}
           bpm={pattern.bpm}
           masterVol={pattern.masterVol}
+          stepCount={pattern.stepCount}
           onTogglePlay={handleTogglePlay}
           onBpmChange={handleBpmChange}
           onMasterVolChange={handleMasterVolChange}
+          onStepCountChange={handleStepCountChange}
         />
       </Card>
 
@@ -158,7 +174,7 @@ export default function Home() {
         <Visualizer
           analyser={analyser}
           mode={vizMode}
-          onToggleMode={() => setVizMode((m) => (m === "waveform" ? "bars" : "waveform"))}
+          onSetMode={setVizMode}
           isPlaying={isPlaying}
         />
       </Card>
@@ -167,14 +183,16 @@ export default function Home() {
       <Card className="overflow-x-auto p-0">
         <div className="min-w-[700px]">
           {/* Step number header */}
-          <div className="flex items-center gap-3 px-2 py-2 border-b border-zinc-800">
+          <div className="flex items-center gap-3 px-2 py-2 border-b border-rim">
             <div className="w-52 min-w-52 shrink-0" />
             <div className="flex gap-1">
-              {Array.from({ length: pattern.tracks[0]?.steps.length ?? 16 }, (_, i) => (
+              {Array.from({ length: pattern.stepCount }, (_, i) => (
                 <React.Fragment key={i}>
                   {i > 0 && i % 4 === 0 && <div className="w-1.5 shrink-0" aria-hidden="true" />}
-                  <div className="w-8 min-w-8 shrink-0 text-center text-[10px] font-mono text-zinc-700">
-                    {i + 1}
+                  <div className={`w-8 min-w-8 shrink-0 text-center text-[10px] font-mono ${
+                    i % 4 === 0 ? "text-ink-dim" : "text-ink-ghost"
+                  }`}>
+                    {i % 4 === 0 ? i + 1 : "·"}
                   </div>
                 </React.Fragment>
               ))}
@@ -211,8 +229,8 @@ export default function Home() {
       </div>
 
       {!initialized && (
-        <p className="text-center text-xs text-zinc-600 pb-2">
-          Press <kbd className="rounded bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 font-mono text-zinc-400">Space</kbd> or click Play to start the audio engine.
+        <p className="text-center text-xs text-ink-dim pb-2">
+          Press <kbd className="rounded bg-well border border-rim px-1.5 py-0.5 font-mono text-ink-dim">Space</kbd> or click Play to start the audio engine.
         </p>
       )}
     </Container>

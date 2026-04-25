@@ -2,14 +2,11 @@
 import React, { useEffect, useState } from "react";
 
 export function ThemeToggle() {
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const isDark = stored ? stored === "dark" : prefersDark;
-    setDark(isDark);
-    document.documentElement.classList.toggle("dark", isDark);
+    // Read whatever the anti-FOUC script already set
+    setDark(document.documentElement.classList.contains("dark"));
   }, []);
 
   function toggle() {
@@ -23,9 +20,10 @@ export function ThemeToggle() {
     <button
       onClick={toggle}
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-      className="rounded p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+      className="rounded-md p-1.5 text-ink-dim hover:text-ink hover:bg-well transition-colors"
+      suppressHydrationWarning
     >
-      {dark ? "☀️" : "🌙"}
+      {dark === null ? null : dark ? "☀️" : "🌙"}
     </button>
   );
 }

@@ -39,9 +39,9 @@ export function RecordPanel({ getMediaStream }: RecordPanelProps) {
 
   return (
     <div aria-live="polite">
-      <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-3">Record</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-ink-dim mb-3">Record</p>
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1 rounded-lg bg-zinc-800 border border-zinc-700 p-0.5">
+        <div className="flex items-center gap-1 rounded-lg bg-well border border-rim p-0.5">
           {([10, 20, 30] as const).map((d) => (
             <button
               key={d}
@@ -50,7 +50,7 @@ export function RecordPanel({ getMediaStream }: RecordPanelProps) {
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 duration === d
                   ? "bg-indigo-600 text-white"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  : "text-ink-dim hover:text-ink"
               }`}
               aria-pressed={duration === d}
               aria-label={`Record ${d} seconds`}

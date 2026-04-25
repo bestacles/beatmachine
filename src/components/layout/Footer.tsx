@@ -2,7 +2,7 @@ import React from "react";
 
 export function Footer() {
   return (
-    <footer className="px-6 py-4 border-t border-zinc-800 text-center text-xs text-zinc-600">
+    <footer className="px-6 py-4 border-t border-rim text-center text-xs text-ink-ghost">
       Built by{" "}
       <a
         href="https://github.com/bestacles"

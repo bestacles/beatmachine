@@ -9,7 +9,7 @@ export function Slider({ label, className, id, ...props }: SliderProps) {
   return (
     <div className="flex items-center gap-2">
       {label && (
-        <label htmlFor={id} className="text-xs text-zinc-500 whitespace-nowrap shrink-0">
+        <label htmlFor={id} className="text-xs text-ink-dim whitespace-nowrap shrink-0">
           {label}
         </label>
       )}

@@ -26,9 +26,9 @@ export function StepGrid({ steps, currentStep, trackIndex, onToggle, disabled }:
               "h-8 w-8 min-w-8 shrink-0 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-900",
               active
                 ? "bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.4)] hover:bg-indigo-400"
-                : "bg-zinc-800 hover:bg-zinc-700 border border-zinc-700",
+                : "bg-well hover:bg-rim border border-rim",
               currentStep === i && active && "ring-2 ring-white/70 ring-offset-1 ring-offset-zinc-900",
-              currentStep === i && !active && "bg-zinc-700",
+              currentStep === i && !active && "bg-rim",
               disabled && "opacity-50 cursor-not-allowed"
             )}
           />

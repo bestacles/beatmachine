@@ -62,7 +62,7 @@ export function SessionMenu({ pattern, onLoad }: SessionMenuProps) {
 
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-3">Session</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-ink-dim mb-3">Session</p>
 
       {/* Save row */}
       <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -72,7 +72,7 @@ export function SessionMenu({ pattern, onLoad }: SessionMenuProps) {
           value={saveName}
           onChange={(e) => setSaveName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSave()}
-          className="rounded-lg bg-zinc-800 border border-zinc-700 px-2.5 py-1 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-36 placeholder:text-zinc-600"
+          className="rounded-lg bg-well border border-rim px-2.5 py-1 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-36 placeholder:text-ink-ghost"
           aria-label="Session name"
         />
         <Button variant="secondary" size="sm" onClick={handleSave}>Save</Button>
@@ -86,7 +86,7 @@ export function SessionMenu({ pattern, onLoad }: SessionMenuProps) {
         <Button variant="ghost" size="sm" onClick={handleShare}>Share Link</Button>
         <Button variant="ghost" size="sm" onClick={() => exportPatternJson(pattern)}>Export JSON</Button>
         <label className="cursor-pointer">
-          <span className="inline-flex items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors">
+          <span className="inline-flex items-center justify-center rounded-lg px-2.5 py-1 text-xs font-medium text-ink-dim hover:text-ink hover:bg-well transition-colors">
             Import JSON
           </span>
           <input type="file" accept=".json" className="hidden" onChange={handleImport} aria-label="Import JSON session file" />
@@ -100,13 +100,13 @@ export function SessionMenu({ pattern, onLoad }: SessionMenuProps) {
       )}
 
       {showSessions && (
-        <div className="mt-3 rounded-lg bg-zinc-800 border border-zinc-700 overflow-hidden">
+        <div className="mt-3 rounded-lg bg-panel border border-rim overflow-hidden">
           {sessions.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-zinc-500">No saved sessions yet.</p>
+            <p className="px-3 py-2 text-xs text-ink-dim">No saved sessions yet.</p>
           ) : (
             sessions.map((s) => (
-              <div key={s.id} className="flex items-center justify-between px-3 py-2 border-b border-zinc-700 last:border-0">
-                <span className="text-xs text-zinc-300 truncate flex-1 mr-2">{s.name}</span>
+              <div key={s.id} className="flex items-center justify-between px-3 py-2 border-b border-rim last:border-0">
+                <span className="text-xs text-ink truncate flex-1 mr-2">{s.name}</span>
                 <div className="flex gap-1 shrink-0">
                   <Button variant="ghost" size="sm" onClick={() => handleLoad(s)}>Load</Button>
                   <Button variant="danger" size="sm" onClick={() => handleDelete(s.id)}>✕</Button>

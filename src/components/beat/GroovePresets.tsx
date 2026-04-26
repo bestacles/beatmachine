@@ -77,114 +77,104 @@ interface SongDef {
 
 const SONG_GROOVES: SongDef[] = [
   {
-    // Queen (1977) — THE stomp-stomp-clap. One bar says it all.
-    // Stomp on beat 1 (step 0), stomp on "and" of 1 (step 2), CLAP on beat 2 (step 4), silence
-    label: "We Will Rock You",
-    artist: "Queen",
-    emoji: "👑",
-    description: "Stomp on 1, stomp on 1+, CLAP on 2 — then glorious silence until next bar",
-    bpm: 81,
-    stepCount: 16,
-    tracks: [
-      { sampleId: "kick",      steps: "X.X.............", vol: 0.95 },
-      { sampleId: "floor-tom", steps: "X.X.............", vol: 0.80 },
-      { sampleId: "clap",      steps: "....X...........", vol: 1.0  },
-      { sampleId: "crash",     steps: "X...............", vol: 0.45 },
-    ],
-  },
-  {
-    // MJ (1982) — LM-1 drums + the iconic F#-minor walking bassline.
-    // Bass arc over 2 bars: F#2-A2-C#3 (up), then B2-A2-G#2-F#2 (down)
-    label: "Billie Jean",
-    artist: "Michael Jackson",
-    emoji: "🕺",
-    description: "MJ's LM-1 groove + F#m walking bass — the most recognizable bass ever",
-    bpm: 117,
-    stepCount: 32,
-    tracks: [
-      // F#m bass: bar1 = F#2 A2 C#3 (quarter notes), bar2 = B2 A2 G#2 F#2 resolve
-      {
-        type: "melody",
-        vol: 0.88,
-        noteSeq: [
-          "F#2",null,null,null,"A2", null,null,null,"C#3",null,null,null,"A2", null,null,null,
-          "B2", null,null,null,"A2", null,null,null,"G#2",null,null,null,"F#2",null,null,null,
-        ],
-      },
-      // Kick: iconic syncopated LM-1 hits
-      { sampleId: "kick",     steps: "X...X.X.X.X.....X...X.X.X.X....", vol: 0.9  },
-      // Snare: beat 2 and 4 every bar
-      { sampleId: "snare",    steps: "....X.......X.......X.......X...", vol: 0.85 },
-      // 16th-note closed hat
-      { sampleId: "hat",      steps: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", vol: 0.38 },
-      // Open hat on 8th-note offbeats
-      { sampleId: "open-hat", steps: "..X...X...X...X...X...X...X...X.", vol: 0.5  },
-    ],
-  },
-  {
-    // The White Stripes (2003) — the bass riff IS the song. E3 descending.
-    // Rhythm: E(dotted-quarter=3) E(8th=2) G(8th=2) E(dotted-quarter=3) D(8th=2) C(8th=2) B(8th=2)
-    label: "Seven Nation Army",
-    artist: "The White Stripes",
-    emoji: "🎸",
-    description: "Iconic descending bass riff — dotted-quarter opening gives it the real feel",
+    // Traditional / public domain — "Jingle Bells" chorus, key of C.
+    // Jin-gle bells, jin-gle bells, jin-gle all the way
+    // E-E-E | E-E-E | E-G-C-D-E | F-F-F-F-F-E-E-E-E-D-D-E-D-G
+    label: "Jingle Bells",
+    artist: "Traditional",
+    emoji: "🔔",
+    description: "The classic Christmas chorus — jin-gle bells, jin-gle bells!",
     bpm: 120,
     stepCount: 32,
     tracks: [
-      // Step layout: E3(0) .(1) .(2) E3(3) .(4) G3(5) .(6) E3(7) .(8) .(9) D3(10) .(11) C3(12) .(13) B2(14) .(15)
+      // Each note = 2 steps; bar 1: E E E(rest) E E E(rest)  E G C D E(rest)
       {
         type: "melody",
-        vol: 0.9,
+        vol: 0.82,
         noteSeq: [
-          "E3",null,null,"E3",null,"G3",null,"E3",null,null,"D3",null,"C3",null,"B2",null,
-          "E3",null,null,"E3",null,"G3",null,"E3",null,null,"D3",null,"C3",null,"B2",null,
+          "E4",null,"E4",null,"E4",null,null,null,"E4",null,"E4",null,"E4",null,null,null,
+          "E4",null,"G4",null,"C4",null,"D4",null,"E4",null,null,null,null,null,null,null,
         ],
       },
-      // Kick on 1 and 3
-      { sampleId: "kick",  steps: "X.......X.......X.......X.......", vol: 0.9 },
-      // Snare on 2 and 4
-      { sampleId: "snare", steps: "....X.......X.......X.......X...", vol: 0.9 },
-      // Straight 8th hats
-      { sampleId: "hat",   steps: "X.X.X.X.X.X.X.X.X.X.X.X.X.X.X.", vol: 0.5 },
+      { sampleId: "kick",  steps: "X.......X.......X.......X.......", vol: 0.75 },
+      { sampleId: "snare", steps: "....X.......X.......X.......X...", vol: 0.70 },
+      { sampleId: "hat",   steps: "X.X.X.X.X.X.X.X.X.X.X.X.X.X.X.", vol: 0.35 },
     ],
   },
   {
-    // Deep Purple (1972) — three power-chord groups (D minor).
-    // Root + perfect 5th layered on two melody tracks for power-chord sound.
-    // Groups: D-F-Ab | D-F-G | D-F-Ab-G | D resolve
-    label: "Smoke on the Water",
-    artist: "Deep Purple",
-    emoji: "💨",
-    description: "D-minor power chord riff — root + 5th layered for that guitar sound",
-    bpm: 112,
+    // Traditional / public domain — "London Bridge is Falling Down", key of C.
+    // Lon-don Bridge is fall-ing down, fall-ing down, fall-ing down
+    // G-A-G-F-E-F-G | D-E-F-E-F-G | G-A-G-F-E-F-G | E-G-E-C
+    label: "London Bridge",
+    artist: "Traditional",
+    emoji: "🌉",
+    description: "London Bridge is falling down — a bouncy 3-note nursery tune",
+    bpm: 108,
     stepCount: 32,
     tracks: [
-      // Root notes: D4 F4 Ab4 | D4 F4 G4 | D4 F4 Ab4 G4 | D4
+      // Each note = 2 steps: G A G F E F G (rest) D E F E F G (rest)
       {
         type: "melody",
-        vol: 0.85,
+        vol: 0.82,
         noteSeq: [
-          "D4",null,null,"F4",null,"Ab4",null,null,"D4",null,null,"F4",null,"G4",null,null,
-          "D4",null,null,"F4",null,"Ab4",null,"G4","D4",null,null,null,null,null,null,null,
+          "G4",null,"A4",null,"G4",null,"F4",null,"E4",null,"F4",null,"G4",null,null,null,
+          "D4",null,"E4",null,"F4",null,"E4",null,"F4",null,"G4",null,null,null,null,null,
         ],
       },
-      // Perfect 5ths above: A4 C5 Eb5 | A4 C5 D5 | A4 C5 Eb5 D5 | A4
+      { sampleId: "kick",  steps: "X.......X.......X.......X.......", vol: 0.72 },
+      { sampleId: "snare", steps: "....X.......X.......X.......X...", vol: 0.65 },
+      { sampleId: "hat",   steps: "X.X.X.X.X.X.X.X.X.X.X.X.X.X.X.", vol: 0.32 },
+    ],
+  },
+  {
+    // Traditional / public domain — most famous song in the world.
+    // Key of C. Rhythm: C(3) C(1) D(4) C(4) F(4) E(8) | C(3) C(1) D(4) C(4) G(4) F(8)
+    // In 16th steps (each beat = 4 steps, dotted-quarter = 3 steps):
+    // "Hap-py Birth-day to you" = C(3) C(1) D(4) C(4) F(4) E(4+rest)
+    label: "Happy Birthday",
+    artist: "Traditional",
+    emoji: "🎂",
+    description: "The most famous song in the world — simple melody everyone knows",
+    bpm: 92,
+    stepCount: 32,
+    tracks: [
+      // Bar 1: Hap(C)-.-.  py(C) Birth(D)-.-.  day(C)-.-.  to(F)-.-.  you(E)-.-. rest
+      // Bar 2: Hap(C)-.-.  py(C) Birth(D)-.-.  day(C)-.-.  to(G)-.-.  you(F)-.-. rest
       {
         type: "melody",
-        vol: 0.55,
+        vol: 0.82,
         noteSeq: [
-          "A4",null,null,"C5",null,"Eb5",null,null,"A4",null,null,"C5",null,"D5",null,null,
-          "A4",null,null,"C5",null,"Eb5",null,"D5","A4",null,null,null,null,null,null,null,
+          "C4",null,null,"C4","D4",null,null,null,"C4",null,null,null,"F4",null,null,null,
+          "E4",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,
         ],
       },
-      // Kick on 1 and 3 with pre-3 accent
-      { sampleId: "kick",  steps: "X.......X...X...X.......X...X...", vol: 0.9  },
-      // Snare on 2 and 4
-      { sampleId: "snare", steps: "....X.......X.......X.......X...", vol: 0.95 },
-      // Straight 8th hats
-      { sampleId: "hat",   steps: "X.X.X.X.X.X.X.X.X.X.X.X.X.X.X.", vol: 0.5  },
-      // Crash on beat 1
-      { sampleId: "crash", steps: "X...............................", vol: 0.75 },
+      { sampleId: "kick",  steps: "X.......X.......X.......X.......", vol: 0.7 },
+      { sampleId: "snare", steps: "....X.......X.......X.......X...", vol: 0.65 },
+      { sampleId: "hat",   steps: "X.X.X.X.X.X.X.X.X.X.X.X.X.X.X.", vol: 0.3 },
+    ],
+  },
+  {
+    // Traditional / public domain — only 3 notes! Perfect for beginners.
+    // E-D-C-D-E-E-E | D-D-D | E-G-G | E-D-C-D-E-E-E-E-D-D-E-D-C
+    label: "Mary Had a Little Lamb",
+    artist: "Traditional",
+    emoji: "🐑",
+    description: "Only 3 notes: E, D and C — the easiest melody to learn",
+    bpm: 100,
+    stepCount: 32,
+    tracks: [
+      // E-D-C-D-E-E-E(rest) D-D-D(rest) E-G-G(rest) — each note = 2 steps
+      {
+        type: "melody",
+        vol: 0.82,
+        noteSeq: [
+          "E4",null,"D4",null,"C4",null,"D4",null,"E4",null,"E4",null,"E4",null,null,null,
+          "D4",null,"D4",null,"D4",null,null,null,"E4",null,"G4",null,"G4",null,null,null,
+        ],
+      },
+      { sampleId: "kick",  steps: "X.......X.......X.......X.......", vol: 0.7 },
+      { sampleId: "snare", steps: "....X.......X.......X.......X...", vol: 0.65 },
+      { sampleId: "hat",   steps: "X.X.X.X.X.X.X.X.X.X.X.X.X.X.X.", vol: 0.3 },
     ],
   },
   {

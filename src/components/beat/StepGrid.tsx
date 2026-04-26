@@ -18,12 +18,19 @@ interface StepGridProps {
   noteLabels?: (string | null)[];
   /** Per-step velocity 0–1. Defaults to 1.0 when not provided. */
   velocities?: number[];
+  /** Highlight these steps with a selection ring */
+  selection?: [number, number] | null;
+  /** When true, dragging selects a range instead of painting steps */
+  selectionMode?: boolean;
+  /** Called while dragging in selection mode */
+  onRangeSelect?: (start: number, end: number) => void;
 }
 
 export function StepGrid({
   steps, currentStep, trackIndex,
   onPaintStart, onPaint, onVelocityChange,
   disabled, trackColor, noteLabels, velocities,
+  selection, selectionMode, onRangeSelect,
 }: StepGridProps) {
   const activeColor = trackColor ?? "#6366f1";
   const activeGlow  = `${activeColor}55`;
@@ -33,9 +40,11 @@ export function StepGrid({
   // Keep a live ref to steps so the pointermove handler always sees current values
   const stepsRef = useRef(steps);
   stepsRef.current = steps;
+  /** Tracks the anchor step when dragging in selection mode */
+  const rangeStartRef = useRef<number | null>(null);
 
   useEffect(() => {
-    function stop() { paintRef.current = null; }
+    function stop() { paintRef.current = null; rangeStartRef.current = null; }
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
     return () => {
@@ -62,7 +71,19 @@ export function StepGrid({
   }, []);
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (disabled || !paintRef.current) return;
+    if (disabled) return;
+    // Selection-mode drag: extend the range
+    if (selectionMode) {
+      if (rangeStartRef.current === null) return;
+      const step = stepAtPoint(e.clientX, e.clientY);
+      if (step === null) return;
+      onRangeSelect?.(
+        Math.min(rangeStartRef.current, step),
+        Math.max(rangeStartRef.current, step),
+      );
+      return;
+    }
+    if (!paintRef.current) return;
     const step = stepAtPoint(e.clientX, e.clientY);
     if (step === null || step === paintRef.current.lastStep) return;
     // Paint all steps between lastStep and this one so fast drags don't skip cells
@@ -80,7 +101,7 @@ export function StepGrid({
   return (
     <div
       ref={containerRef}
-      className="flex gap-1 select-none touch-none"
+      className={`flex gap-1 select-none touch-none${selectionMode ? " cursor-crosshair" : ""}`}
       role="group"
       aria-label={`Track ${trackIndex + 1} steps`}
       onPointerMove={handlePointerMove}
@@ -90,6 +111,7 @@ export function StepGrid({
         const vel   = velocities?.[i] ?? 1.0;
         // Dim active steps according to velocity level
         const opacity = active ? (vel > 0.6 ? 1 : vel > 0.3 ? 0.55 : 0.3) : 1;
+        const inSel = selection != null && i >= selection[0] && i <= selection[1];
         return (
           <React.Fragment key={i}>
             {i > 0 && i % 4 === 0 && <div className="w-1.5 shrink-0" aria-hidden="true" />}
@@ -110,6 +132,11 @@ export function StepGrid({
                 // Capture the pointer so move/up events keep firing even if the
                 // finger/cursor leaves the button or the container entirely
                 (e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId);
+                if (selectionMode) {
+                  rangeStartRef.current = i;
+                  onRangeSelect?.(i, i);
+                  return;
+                }
                 const newVal = !active;
                 paintRef.current = { value: newVal, lastStep: i };
                 onPaintStart(i, newVal);
@@ -129,6 +156,7 @@ export function StepGrid({
                   : "bg-well hover:bg-rim border border-rim",
                 currentStep === i && active && "ring-2 ring-white/70 ring-offset-1 ring-offset-zinc-900",
                 currentStep === i && !active && "bg-rim",
+                inSel && "ring-2 ring-sky-400/70 ring-offset-1 ring-offset-zinc-900",
                 disabled && "opacity-50 cursor-not-allowed"
               )}
             >

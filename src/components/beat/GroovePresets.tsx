@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { type Pattern, TRACK_COUNT } from "@/lib/pattern";
+import { type Pattern, type InstrumentSection, SECTION_COLORS } from "@/lib/pattern";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -26,40 +26,75 @@ function makePattern(
   bpm: number,
   tracks: TrackDef[],
   stepCount: 8 | 16 | 32 | 64 = 16,
-): Pick<Pattern, "bpm" | "stepCount" | "tracks"> {
-  const fullTracks = Array.from({ length: TRACK_COUNT }, (_, i) => {
-    const t = tracks[i];
-    if (!t) {
-      return {
-        id: `track-${i}`, sampleId: "kick", type: "drum" as const,
-        vol: 0.8, mute: false, solo: false,
-        steps: Array(stepCount).fill(false) as boolean[],
-        notes: Array(stepCount).fill(null) as (number | null)[],
-        velocity: Array(stepCount).fill(1) as number[],
-        probability: Array(stepCount).fill(1) as number[],
-      };
-    }
-    if ("type" in t && t.type === "melody") {
-      return {
-        id: `track-${i}`, sampleId: "synth", type: "melody" as const,
-        vol: t.vol ?? 0.75, mute: false, solo: false,
-        steps: t.noteSeq.map((n) => n !== null),
-        notes: t.noteSeq.map((n) => (n !== null ? noteToMidi(n) : null)),
-        velocity: Array(stepCount).fill(1) as number[],
-        probability: Array(stepCount).fill(1) as number[],
-      };
-    }
-    const d = t as DrumTrackDef;
-    return {
-      id: `track-${i}`, sampleId: d.sampleId, type: "drum" as const,
-      vol: d.vol ?? 0.8, mute: false, solo: false,
-      steps: s(d.steps),
+): Pick<Pattern, "bpm" | "stepCount" | "sections"> {
+  // Separate defs into drum vs melody
+  const drumDefs    = tracks.filter((t): t is DrumTrackDef  => !("type" in t));
+  const melodyDefs  = tracks.filter((t): t is MelodyTrackDef => "type" in t && t.type === "melody");
+
+  const drumTracks = drumDefs.map((d, i) => ({
+    id: `preset-d${i}`, sampleId: d.sampleId, type: "drum" as const,
+    vol: d.vol ?? 0.8, mute: false, solo: false,
+    steps: s(d.steps),
+    notes: Array(stepCount).fill(null) as (number | null)[],
+    velocity: Array(stepCount).fill(1) as number[],
+    probability: Array(stepCount).fill(1) as number[],
+  }));
+
+  const pianoTracks = melodyDefs.map((m, i) => ({
+    id: `preset-m${i}`, sampleId: "synth", type: "melody" as const,
+    vol: m.vol ?? 0.75, mute: false, solo: false,
+    steps: m.noteSeq.map((n) => n !== null),
+    notes: m.noteSeq.map((n) => (n !== null ? noteToMidi(n) : null)),
+    velocity: Array(stepCount).fill(1) as number[],
+    probability: Array(stepCount).fill(1) as number[],
+  }));
+
+  // Ensure at least one drum track so Drums section is never empty
+  if (drumTracks.length === 0) {
+    drumTracks.push({
+      id: "preset-d-kick", sampleId: "kick", type: "drum" as const,
+      vol: 0.8, mute: false, solo: false,
+      steps: Array(stepCount).fill(false) as boolean[],
       notes: Array(stepCount).fill(null) as (number | null)[],
       velocity: Array(stepCount).fill(1) as number[],
       probability: Array(stepCount).fill(1) as number[],
-    };
-  });
-  return { bpm, stepCount, tracks: fullTracks };
+    });
+  }
+  if (pianoTracks.length === 0) {
+    pianoTracks.push({
+      id: "preset-m-synth", sampleId: "synth", type: "melody" as const,
+      vol: 0.75, mute: false, solo: false,
+      steps: Array(stepCount).fill(false) as boolean[],
+      notes: Array(stepCount).fill(null) as (number | null)[],
+      velocity: Array(stepCount).fill(1) as number[],
+      probability: Array(stepCount).fill(1) as number[],
+    });
+  }
+
+  const sections: InstrumentSection[] = [
+    {
+      id: "section-drums", type: "drums", name: "Drums",
+      color: SECTION_COLORS.drums, vol: 1, mute: false, solo: false,
+      tracks: drumTracks,
+    },
+    {
+      id: "section-piano", type: "piano", name: "Piano",
+      color: SECTION_COLORS.piano, vol: 1, mute: false, solo: false,
+      tracks: pianoTracks,
+    },
+    {
+      id: "section-bass",  type: "bass",  name: "Bass",
+      color: SECTION_COLORS.bass,  vol: 1, mute: false, solo: false,
+      tracks: [{ id: "preset-b0", sampleId: "bass", type: "melody" as const, vol: 0.8, mute: false, solo: false, steps: Array(stepCount).fill(false) as boolean[], notes: Array(stepCount).fill(null) as (number | null)[], velocity: Array(stepCount).fill(1) as number[], probability: Array(stepCount).fill(1) as number[] }],
+    },
+    {
+      id: "section-synth", type: "synth", name: "Synth",
+      color: SECTION_COLORS.synth, vol: 1, mute: false, solo: false,
+      tracks: [{ id: "preset-s0", sampleId: "synth", type: "melody" as const, vol: 0.75, mute: false, solo: false, steps: Array(stepCount).fill(false) as boolean[], notes: Array(stepCount).fill(null) as (number | null)[], velocity: Array(stepCount).fill(1) as number[], probability: Array(stepCount).fill(1) as number[] }],
+    },
+  ];
+
+  return { bpm, stepCount, sections };
 }
 
 // ── Song showcase definitions ─────────────────────────────────────────────────
@@ -127,26 +162,27 @@ const SONG_GROOVES: SongDef[] = [
     ],
   },
   {
-    // Traditional / public domain — most famous song in the world.
-    // 3/4 melody fitted into 32 16th-note steps (2 bars of 4/4).
-    // Phrase 1 "Hap-py Birth-day to you": C(2) C(2) D(4) C(2) F(4) E(2)
-    // Phrase 2 "Hap-py Birth-day to you": C(2) C(2) D(4) C(2) G(4) F(2)
-    // D4 gets 4 steps (dotted-quarter feel) — the key rhythmic hook of the song.
+    // Traditional / public domain — all 4 phrases, 8 steps each = 32 steps.
+    // Key of G. "BIRTH" gets 2 steps for the dotted-quarter feel.
+    // Phrase 1: G G A G C B  ("Hap-py Birth-day to you")
+    // Phrase 2: G G A G D C  ("Hap-py Birth-day to you")
+    // Phrase 3: G G G E C B A  ("Hap-py Birth-day dear [name]")
+    // Phrase 4: F F E C D C  ("Hap-py Birth-day to you!")
     label: "Happy Birthday",
     artist: "Traditional",
     emoji: "🎂",
-    description: "The most famous song in the world — simple melody everyone knows",
+    description: "The most famous song in the world — all 4 phrases, simple G major melody",
     bpm: 92,
     stepCount: 32,
     tracks: [
-      // Phrase 1: Hap(C) py(C) Birth(D).. day(C) to(F).. you(E)
-      // Phrase 2: Hap(C) py(C) Birth(D).. day(C) to(G).. you(F)
       {
         type: "melody",
         vol: 0.82,
         noteSeq: [
-          "C4",null,"C4",null,"D4",null,null,null,"C4",null,"F4",null,null,null,"E4",null,
-          "C4",null,"C4",null,"D4",null,null,null,"C4",null,"G4",null,null,null,"F4",null,
+          "G4","G4","A4",null,"G4","C5","B4",null,
+          "G4","G4","A4",null,"G4","D5","C5",null,
+          "G4","G4","G4","E4","C5","B4","A4",null,
+          "F4","F4","E4",null,"C5","D5","C5",null,
         ],
       },
       { sampleId: "kick",  steps: "X.......X.......X.......X.......", vol: 0.7 },
@@ -379,11 +415,14 @@ const GROOVES: GrooveDef[] = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 interface GroovePresetsProps {
-  onLoad: (patch: Pick<Pattern, "bpm" | "stepCount" | "tracks">) => void;
+  onLoad: (patch: Pick<Pattern, "bpm" | "stepCount" | "sections">) => void;
+  compact?: boolean;
 }
 
-export function GroovePresets({ onLoad }: GroovePresetsProps) {
-  return (
+export function GroovePresets({ onLoad, compact }: GroovePresetsProps) {
+  const [open, setOpen] = React.useState(false);
+
+  const presetContent = (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold text-ink">🎛️ Start with a groove</span>
@@ -425,4 +464,32 @@ export function GroovePresets({ onLoad }: GroovePresetsProps) {
       </div>
     </div>
   );
+
+  if (compact) {
+    return (
+      <div className="relative">
+        <Tooltip content="Load a preset groove or song starter">
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-rim bg-well px-3 py-1.5 text-xs font-semibold text-ink-dim hover:text-ink hover:bg-rim transition-colors"
+          >
+            <span aria-hidden="true">🎵</span>
+            Grooves
+            <span aria-hidden="true" className="text-[10px] opacity-60">{open ? "▲" : "▼"}</span>
+          </button>
+        </Tooltip>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden="true" />
+            <div className="absolute right-0 top-full mt-1 z-20 rounded-xl border border-rim bg-panel p-4 shadow-xl w-[30rem] max-w-[90vw]">
+              {presetContent}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return presetContent;
 }

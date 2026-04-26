@@ -3,14 +3,17 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Container } from "@/components/layout/Container";
 import { Card } from "@/components/ui/Card";
 import { Transport } from "@/components/beat/Transport";
-import { TrackRow } from "@/components/beat/TrackRow";
 import { Visualizer } from "@/components/beat/Visualizer";
 import { SessionMenu } from "@/components/beat/SessionMenu";
 import { RecordPanel } from "@/components/beat/RecordPanel";
 import { getEngine } from "@/lib/audio/engine";
 import { Scheduler, stepDurationSec } from "@/lib/audio/scheduler";
-import { createDefaultPattern, decodeShareUrl, type Pattern, type TrackState } from "@/lib/pattern";
-import { clamp, TRACK_COLORS } from "@/lib/utils";
+import {
+  createDefaultPattern, decodeShareUrl,
+  type Pattern, type TrackState, type InstrumentSection,
+  SECTION_COLORS,
+} from "@/lib/pattern";
+import { clamp } from "@/lib/utils";
 import { PianoKeyboard } from "@/components/beat/PianoKeyboard";
 import { MidiPanel } from "@/components/beat/MidiPanel";
 import { GroovePresets } from "@/components/beat/GroovePresets";
@@ -21,6 +24,9 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { autoSavePatterns, loadAutoSave } from "@/lib/session";
 import { SoundPackSwitcher } from "@/components/beat/SoundPackSwitcher";
 import { DEFAULT_PACK_ID } from "@/lib/audio/samples";
+import { InstrumentTabs } from "@/components/beat/InstrumentTabs";
+import { SectionMixer } from "@/components/beat/SectionMixer";
+import { InstrumentEditor } from "@/components/beat/InstrumentEditor";
 
 export default function Home() {
   // Pattern A / B slots
@@ -58,6 +64,12 @@ export default function Home() {
 
   // Clipboard: stores a copied track's steps/notes/velocity
   const [clipboardTrack, setClipboardTrack] = useState<Pick<TrackState, "steps" | "notes" | "velocity"> | null>(null);
+  // Step-range clipboard: stores a copied region of steps from a single track
+  const [stepRangeClipboard, setStepRangeClipboard] = useState<{
+    steps: boolean[];
+    notes: (number | number[] | null)[];
+    velocity: number[];
+  } | null>(null);
 
   // Metronome
   const [metronomeActive, setMetronomeActive] = useState(false);
@@ -67,13 +79,16 @@ export default function Home() {
   const [chainActive, setChainActive] = useState(false);
   const chainActiveRef = useRef(false);
 
-  // Euclidean dialog
-  const [euclidTrack, setEuclidTrack] = useState<number | null>(null);
+  // Euclidean dialog — now scoped to (sectionId, trackIndex)
+  const [euclidTrack, setEuclidTrack] = useState<{ sectionId: string; trackIndex: number } | null>(null);
 
-  // Focused track index for keyboard shortcuts (M = mute, S = solo)
+  // Active instrument tab: "mix" | section.id
+  const [activeTab, setActiveTab] = useState<string>("section-drums");
+
+  // Focused track for keyboard shortcuts — now relative to active section
   const [focusedTrack, setFocusedTrack] = useState<number | null>(null);
 
-  // Drag-reorder state
+  // Drag-reorder state — per active section
   const dragIndexRef = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
@@ -172,13 +187,14 @@ export default function Home() {
       }
       // M = mute focused track, S = solo focused track
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (e.code === "KeyM" && focusedTrack !== null) {
+        const activeSection = patternRef.current.sections.find((s) => s.id === activeTab);
+        if (e.code === "KeyM" && focusedTrack !== null && activeSection) {
           e.preventDefault();
-          handleToggleMute(focusedTrack);
+          handleToggleMute(activeTab, focusedTrack);
         }
-        if (e.code === "KeyS" && focusedTrack !== null) {
+        if (e.code === "KeyS" && focusedTrack !== null && activeSection) {
           e.preventDefault();
-          handleToggleSolo(focusedTrack);
+          handleToggleSolo(activeTab, focusedTrack);
         }
         // Arrow keys to move focused track
         if (e.code === "ArrowUp") {
@@ -188,7 +204,8 @@ export default function Home() {
         if (e.code === "ArrowDown") {
           e.preventDefault();
           setFocusedTrack((f) => {
-            const last = patternRef.current.tracks.length - 1;
+            const sec = patternRef.current.sections.find((s) => s.id === activeTab);
+            const last = (sec?.tracks.length ?? 1) - 1;
             return f === null ? 0 : Math.min(f + 1, last);
           });
         }
@@ -204,8 +221,10 @@ export default function Home() {
     const engine = getEngine();
     await engine.init();
     engine.setMasterVolume(patternRef.current.masterVol);
-    patternRef.current.tracks.forEach((t) => {
-      engine.setTrackVolume(t.id, t.vol);
+    patternRef.current.sections.forEach((sec) => {
+      sec.tracks.forEach((t) => {
+        engine.setTrackVolume(t.id, t.vol * sec.vol);
+      });
     });
     setAnalyser(engine.getAnalyser());
     setInitialized(true);
@@ -223,46 +242,57 @@ export default function Home() {
     }
     const p = patternRef.current;
     const engine = getEngine();
-    const hasSolo = p.tracks.some((t) => t.solo);
+    const hasSoloSection = p.sections.some((s) => s.solo);
     const notesThisStep: number[] = [];
     const humanize = p.humanize ?? 0;
-    p.tracks.forEach((track) => {
-      if (track.mute) return;
-      if (hasSolo && !track.solo) return;
-      if (!track.steps[step]) return;
 
-      // Per-step probability gate
-      const prob = track.probability?.[step] ?? 1;
-      if (prob < 1 && Math.random() > prob) return;
+    for (const section of p.sections) {
+      if (section.mute) continue;
+      if (hasSoloSection && !section.solo) continue;
+      // Per-section step count override (Phase 5 feature — safe to compute now)
+      const secStep = section.sectionStepCount
+        ? step % section.sectionStepCount
+        : step;
+      const hasSoloTrack = section.tracks.some((t) => t.solo);
 
-      if (track.type === "melody") {
-        const midi = track.notes?.[step];
-        if (midi != null) {
-          const dur = stepDurationSec(p.bpm) * 1.8;
-          const octaveShift = (track.octaveOffset ?? 0) * 12;
-          const midiArr = Array.isArray(midi) ? midi : [midi];
-          const timeJitter = humanize > 0 ? (Math.random() - 0.3) * humanize * 0.0006 : 0;
-          const playTime = time + Math.max(0, timeJitter);
-          for (const m of midiArr) {
-            const shifted = m + octaveShift;
-            engine.playToneAt(noteFrequency(shifted), track.vol * 0.85, dur, playTime);
-            notesThisStep.push(shifted);
-            if (midiAccessRef.current && midiOutputIdRef.current) {
-              sendMelodicNote(midiAccessRef.current, midiOutputIdRef.current, shifted, Math.round(track.vol * 85), Math.round(dur * 1000));
+      for (const track of section.tracks) {
+        if (track.mute) continue;
+        if (hasSoloTrack && !track.solo) continue;
+        if (!track.steps[secStep]) continue;
+
+        // Per-step probability gate
+        const prob = track.probability?.[secStep] ?? 1;
+        if (prob < 1 && Math.random() > prob) return;
+
+        if (track.type === "melody") {
+          const midi = track.notes?.[secStep];
+          if (midi != null) {
+            const dur = stepDurationSec(p.bpm) * 1.8;
+            const octaveShift = (track.octaveOffset ?? 0) * 12;
+            const midiArr = Array.isArray(midi) ? midi : [midi];
+            const timeJitter = humanize > 0 ? (Math.random() - 0.3) * humanize * 0.0006 : 0;
+            const playTime = time + Math.max(0, timeJitter);
+            for (const m of midiArr) {
+              const shifted = m + octaveShift;
+              engine.playToneAt(noteFrequency(shifted), track.vol * section.vol * 0.85, dur, playTime);
+              notesThisStep.push(shifted);
+              if (midiAccessRef.current && midiOutputIdRef.current) {
+                sendMelodicNote(midiAccessRef.current, midiOutputIdRef.current, shifted, Math.round(track.vol * 85), Math.round(dur * 1000));
+              }
             }
           }
-        }
-      } else {
-        const baseVel = track.velocity?.[step] ?? 1.0;
-        const velJitter = humanize > 0 ? (1 - Math.random() * humanize * 0.003) : 1;
-        const vel = Math.max(0.05, baseVel * velJitter);
-        const timeJitter = humanize > 0 ? (Math.random() - 0.3) * humanize * 0.0006 : 0;
-        engine.playBuffer(track.sampleId, track.id, time + Math.max(0, timeJitter), vel);
-        if (midiAccessRef.current && midiOutputIdRef.current) {
-          sendDrumNote(midiAccessRef.current, midiOutputIdRef.current, track.sampleId);
+        } else {
+          const baseVel = track.velocity?.[secStep] ?? 1.0;
+          const velJitter = humanize > 0 ? (1 - Math.random() * humanize * 0.003) : 1;
+          const vel = Math.max(0.05, baseVel * velJitter) * section.vol;
+          const timeJitter = humanize > 0 ? (Math.random() - 0.3) * humanize * 0.0006 : 0;
+          engine.playBuffer(track.sampleId, track.id, time + Math.max(0, timeJitter), vel);
+          if (midiAccessRef.current && midiOutputIdRef.current) {
+            sendDrumNote(midiAccessRef.current, midiOutputIdRef.current, track.sampleId);
+          }
         }
       }
-    });
+    }
     // Update lit keys on piano keyboard
     setPlayingNotes(notesThisStep);
   }, []);
@@ -300,11 +330,25 @@ export default function Home() {
     }
   }
 
-  function updateTrack(index: number, updater: (t: TrackState) => TrackState) {
+  // ── Section + track update helpers ──────────────────────────────────────
+
+  function updateSection(sectionId: string, updater: (s: InstrumentSection) => InstrumentSection) {
     setPattern((prev) => ({
       ...prev,
-      tracks: prev.tracks.map((t, i) => (i === index ? updater(t) : t)),
+      sections: prev.sections.map((s) => s.id === sectionId ? updater(s) : s),
     }));
+  }
+
+  function updateTrack(sectionId: string, trackIndex: number, updater: (t: TrackState) => TrackState) {
+    updateSection(sectionId, (sec) => ({
+      ...sec,
+      tracks: sec.tracks.map((t, i) => i === trackIndex ? updater(t) : t),
+    }));
+  }
+
+  /** Returns the active section, or undefined if the active tab is "mix" or not found */
+  function getActiveSection(): InstrumentSection | undefined {
+    return pattern.sections.find((s) => s.id === activeTab);
   }
 
   function handleBpmChange(bpm: number) {
@@ -317,44 +361,59 @@ export default function Home() {
     if (initialized) getEngine().setMasterVolume(clamped);
   }
 
-  function handleChangeSample(trackIndex: number, sampleId: string) {
-    updateTrack(trackIndex, (t) => ({ ...t, sampleId }));
+  function handleChangeSample(sectionId: string, trackIndex: number, sampleId: string) {
+    updateTrack(sectionId, trackIndex, (t) => ({ ...t, sampleId }));
   }
 
-  function handleChangeVol(trackIndex: number, vol: number) {
-    updateTrack(trackIndex, (t) => ({ ...t, vol }));
-    if (initialized) getEngine().setTrackVolume(pattern.tracks[trackIndex].id, vol);
+  function handleChangeVol(sectionId: string, trackIndex: number, vol: number) {
+    updateTrack(sectionId, trackIndex, (t) => ({ ...t, vol }));
+    const sec = pattern.sections.find((s) => s.id === sectionId);
+    if (initialized && sec) getEngine().setTrackVolume(sec.tracks[trackIndex].id, vol * sec.vol);
   }
 
-  function handleToggleMute(trackIndex: number) {
-    updateTrack(trackIndex, (t) => ({ ...t, mute: !t.mute }));
+  function handleToggleMute(sectionId: string, trackIndex: number) {
+    updateTrack(sectionId, trackIndex, (t) => ({ ...t, mute: !t.mute }));
   }
 
-  function handleToggleSolo(trackIndex: number) {
-    updateTrack(trackIndex, (t) => ({ ...t, solo: !t.solo }));
+  function handleToggleSolo(sectionId: string, trackIndex: number) {
+    updateTrack(sectionId, trackIndex, (t) => ({ ...t, solo: !t.solo }));
+  }
+
+  function handleSectionMute(sectionId: string) {
+    updateSection(sectionId, (s) => ({ ...s, mute: !s.mute }));
+  }
+
+  function handleSectionSolo(sectionId: string) {
+    updateSection(sectionId, (s) => ({ ...s, solo: !s.solo }));
+  }
+
+  function handleSectionVolChange(sectionId: string, vol: number) {
+    updateSection(sectionId, (s) => ({ ...s, vol: clamp(vol, 0, 1) }));
   }
 
   function handleStepCountChange(count: 8 | 16 | 32 | 64) {
     setPattern((prev) => ({
       ...prev,
       stepCount: count,
-      tracks: prev.tracks.map((t) => ({
-        ...t,
-        steps: count > t.steps.length
-          ? [...t.steps, ...Array(count - t.steps.length).fill(false)]
-          : t.steps.slice(0, count),
-        notes: count > t.notes.length
-          ? [...t.notes, ...Array(count - t.notes.length).fill(null)]
-          : t.notes.slice(0, count),
-        velocity: count > t.velocity.length
-          ? [...t.velocity, ...Array(count - t.velocity.length).fill(1)]
-          : t.velocity.slice(0, count),
-        probability: count > (t.probability?.length ?? 0)
-          ? [...(t.probability ?? []), ...Array(count - (t.probability?.length ?? 0)).fill(1)]
-          : (t.probability ?? Array(count).fill(1)).slice(0, count),
+      sections: prev.sections.map((sec) => ({
+        ...sec,
+        tracks: sec.tracks.map((t) => ({
+          ...t,
+          steps: count > t.steps.length
+            ? [...t.steps, ...Array(count - t.steps.length).fill(false)]
+            : t.steps.slice(0, count),
+          notes: count > t.notes.length
+            ? [...t.notes, ...Array(count - t.notes.length).fill(null)]
+            : t.notes.slice(0, count),
+          velocity: count > t.velocity.length
+            ? [...t.velocity, ...Array(count - t.velocity.length).fill(1)]
+            : t.velocity.slice(0, count),
+          probability: count > (t.probability?.length ?? 0)
+            ? [...(t.probability ?? []), ...Array(count - (t.probability?.length ?? 0)).fill(1)]
+            : (t.probability ?? Array(count).fill(1)).slice(0, count),
+        })),
       })),
     }));
-    // Clamp loop range to new step count
     setLoopRange((r) => r
       ? [Math.min(r[0], count - 1), Math.min(r[1], count - 1)]
       : null
@@ -376,12 +435,12 @@ export default function Home() {
     setPattern((prev) => ({ ...prev, humanize: v }));
   }
 
-  function handleOctaveOffsetChange(trackIndex: number, offset: number) {
-    updateTrack(trackIndex, (t) => ({ ...t, octaveOffset: offset }));
+  function handleOctaveOffsetChange(sectionId: string, trackIndex: number, offset: number) {
+    updateTrack(sectionId, trackIndex, (t) => ({ ...t, octaveOffset: offset }));
   }
 
-  function handleColorChange(trackIndex: number, color: string) {
-    updateTrack(trackIndex, (t) => ({ ...t, color }));
+  function handleColorChange(sectionId: string, trackIndex: number, color: string) {
+    updateTrack(sectionId, trackIndex, (t) => ({ ...t, color }));
   }
 
   async function handleSoundPackSwitch(packId: string, folder: string) {
@@ -415,19 +474,22 @@ export default function Home() {
     pushHistory();
     setPattern((prev) => ({
       ...prev,
-      tracks: prev.tracks.map((t) => ({
-        ...t,
-        steps:       Array(prev.stepCount).fill(false) as boolean[],
-        notes:       Array(prev.stepCount).fill(null),
-        velocity:    Array(prev.stepCount).fill(1) as number[],
-        probability: Array(prev.stepCount).fill(1) as number[],
+      sections: prev.sections.map((sec) => ({
+        ...sec,
+        tracks: sec.tracks.map((t) => ({
+          ...t,
+          steps:       Array(prev.stepCount).fill(false) as boolean[],
+          notes:       Array(prev.stepCount).fill(null),
+          velocity:    Array(prev.stepCount).fill(1) as number[],
+          probability: Array(prev.stepCount).fill(1) as number[],
+        })),
       })),
     }));
   }
 
-  function handleClearTrack(trackIndex: number) {
+  function handleClearTrack(sectionId: string, trackIndex: number) {
     pushHistory();
-    updateTrack(trackIndex, (t) => ({
+    updateTrack(sectionId, trackIndex, (t) => ({
       ...t,
       steps: t.steps.map(() => false),
       notes: t.notes.map(() => null),
@@ -465,21 +527,20 @@ export default function Home() {
     setCanRedo(stack.length > 1);
   }
 
-  // ── Step set (used by drag painting — value-based, not toggle-based) ──────
+  // ── Step set ──────────────────────────────────────────────────────────────
 
-  function handleSetStep(trackIndex: number, step: number, value: boolean) {
-    updateTrack(trackIndex, (t) => ({
+  function handleSetStep(sectionId: string, trackIndex: number, step: number, value: boolean) {
+    updateTrack(sectionId, trackIndex, (t) => ({
       ...t,
       steps: t.steps.map((v, i) => (i === step ? value : v)),
     }));
   }
 
-  function handleSetMelodyStep(trackIndex: number, step: number, value: boolean) {
-    // Use armed chord if available, else armed note, else root of current octave
+  function handleSetMelodyStep(sectionId: string, trackIndex: number, step: number, value: boolean) {
     const noteValue: number | number[] | null = value
       ? (selectedChord ?? selectedNote ?? midiNoteNumber(pianoRoot, pianoOctave))
       : null;
-    updateTrack(trackIndex, (t) => ({
+    updateTrack(sectionId, trackIndex, (t) => ({
       ...t,
       steps: t.steps.map((v, i) => (i === step ? value : v)),
       notes: t.notes.map((n, i) => (i === step ? noteValue : n)),
@@ -488,8 +549,8 @@ export default function Home() {
 
   // ── Per-step velocity ─────────────────────────────────────────────────────
 
-  function handleVelocityChange(trackIndex: number, step: number, velocity: number) {
-    updateTrack(trackIndex, (t) => ({
+  function handleVelocityChange(sectionId: string, trackIndex: number, step: number, velocity: number) {
+    updateTrack(sectionId, trackIndex, (t) => ({
       ...t,
       velocity: t.velocity.map((v, i) => (i === step ? velocity : v)),
     }));
@@ -497,14 +558,16 @@ export default function Home() {
 
   // ── Add / remove tracks ───────────────────────────────────────────────────
 
-  function handleAddTrack() {
-    if (pattern.tracks.length >= 16) return;
+  function handleAddTrack(sectionId: string) {
+    const sec = pattern.sections.find((s) => s.id === sectionId);
+    if (!sec || sec.tracks.length >= 16) return;
     pushHistory();
     const id = `track-${Date.now()}`;
+    const defaultType = sec.type === "drums" ? "drum" : "melody";
     const newTrack: TrackState = {
       id,
-      sampleId: "kick",
-      type: "drum",
+      sampleId: defaultType === "drum" ? "kick" : "synth",
+      type: defaultType,
       vol: 0.8,
       mute: false,
       solo: false,
@@ -513,26 +576,32 @@ export default function Home() {
       velocity: Array(pattern.stepCount).fill(1) as number[],
       probability: Array(pattern.stepCount).fill(1) as number[],
     };
-    setPattern((prev) => ({ ...prev, tracks: [...prev.tracks, newTrack] }));
+    updateSection(sectionId, (s) => ({ ...s, tracks: [...s.tracks, newTrack] }));
   }
 
-  function handleRemoveTrack(trackIndex: number) {
-    if (pattern.tracks.length <= 1) return;
+  function handleRemoveTrack(sectionId: string, trackIndex: number) {
+    const sec = pattern.sections.find((s) => s.id === sectionId);
+    if (!sec || sec.tracks.length <= 1) return;
     pushHistory();
-    setPattern((prev) => ({ ...prev, tracks: prev.tracks.filter((_, i) => i !== trackIndex) }));
+    updateSection(sectionId, (s) => ({
+      ...s,
+      tracks: s.tracks.filter((_, i) => i !== trackIndex),
+    }));
   }
 
   // ── Copy / paste track ────────────────────────────────────────────────────
 
-  function handleCopyTrack(trackIndex: number) {
-    const t = pattern.tracks[trackIndex];
+  function handleCopyTrack(sectionId: string, trackIndex: number) {
+    const sec = pattern.sections.find((s) => s.id === sectionId);
+    if (!sec) return;
+    const t = sec.tracks[trackIndex];
     setClipboardTrack({ steps: [...t.steps], notes: [...t.notes], velocity: [...t.velocity] });
   }
 
-  function handlePasteTrack(trackIndex: number) {
+  function handlePasteTrack(sectionId: string, trackIndex: number) {
     if (!clipboardTrack) return;
     pushHistory();
-    updateTrack(trackIndex, (t) => {
+    updateTrack(sectionId, trackIndex, (t) => {
       const len = t.steps.length;
       function padArr<T>(arr: T[], fill: T): T[] {
         return arr.length >= len ? arr.slice(0, len) : [...arr, ...Array(len - arr.length).fill(fill)];
@@ -546,16 +615,139 @@ export default function Home() {
     });
   }
 
+  // ── Duplicate track ───────────────────────────────────────────────────────
+
+  function handleDuplicateTrack(sectionId: string, trackIndex: number) {
+    const sec = pattern.sections.find((s) => s.id === sectionId);
+    if (!sec || sec.tracks.length >= 16) return;
+    pushHistory();
+    updateSection(sectionId, (s) => {
+      const tracks = [...s.tracks];
+      const original = tracks[trackIndex];
+      const clone: TrackState = {
+        ...original,
+        id: `track-${Date.now()}`,
+        steps: [...original.steps],
+        notes: [...original.notes],
+        velocity: [...original.velocity],
+        probability: [...original.probability],
+      };
+      tracks.splice(trackIndex + 1, 0, clone);
+      return { ...s, tracks };
+    });
+  }
+
+  // ── Shift track steps ─────────────────────────────────────────────────────
+
+  function handleShiftTrack(sectionId: string, trackIndex: number, dir: -1 | 1) {
+    pushHistory();
+    updateTrack(sectionId, trackIndex, (t) => {
+      const n = t.steps.length;
+      function rotateArr<T>(arr: T[]): T[] {
+        if (dir === 1) return [arr[n - 1], ...arr.slice(0, n - 1)] as T[];
+        return [...arr.slice(1), arr[0]] as T[];
+      }
+      return {
+        ...t,
+        steps:    rotateArr(t.steps),
+        notes:    rotateArr(t.notes),
+        velocity: rotateArr(t.velocity),
+      };
+    });
+  }
+
+  // ── Double pattern ────────────────────────────────────────────────────────
+
+  function handleDoublePattern() {
+    if (pattern.stepCount >= 64) return;
+    const newCount = (pattern.stepCount * 2) as 8 | 16 | 32 | 64;
+    pushHistory();
+    setPattern((prev) => ({
+      ...prev,
+      stepCount: newCount,
+      sections: prev.sections.map((sec) => ({
+        ...sec,
+        tracks: sec.tracks.map((t) => ({
+          ...t,
+          steps:    [...t.steps,    ...t.steps],
+          notes:    [...t.notes,    ...t.notes],
+          velocity: [...t.velocity, ...t.velocity],
+          probability: [...t.probability, ...t.probability],
+        })),
+      })),
+    }));
+    setLoopRange((r) => r ? [r[0], Math.min(r[1], newCount - 1)] : null);
+  }
+
+  // ── Step-range copy / paste / fill ────────────────────────────────────────
+
+  function handleCopyRange(sectionId: string, trackIndex: number, start: number, end: number) {
+    const sec = pattern.sections.find((s) => s.id === sectionId);
+    if (!sec) return;
+    const t = sec.tracks[trackIndex];
+    const s = Math.min(start, end);
+    const e = Math.max(start, end);
+    setStepRangeClipboard({
+      steps:    t.steps.slice(s, e + 1),
+      notes:    t.notes.slice(s, e + 1),
+      velocity: t.velocity.slice(s, e + 1),
+    });
+  }
+
+  function handlePasteRange(sectionId: string, trackIndex: number, at: number) {
+    if (!stepRangeClipboard) return;
+    pushHistory();
+    updateTrack(sectionId, trackIndex, (t) => {
+      const newSteps    = [...t.steps];
+      const newNotes    = [...t.notes];
+      const newVelocity = [...t.velocity];
+      stepRangeClipboard.steps.forEach((sv, j) => {
+        const idx = at + j;
+        if (idx < t.steps.length) {
+          newSteps[idx]    = sv;
+          newNotes[idx]    = stepRangeClipboard.notes[j] ?? null;
+          newVelocity[idx] = stepRangeClipboard.velocity[j] ?? 1;
+        }
+      });
+      return { ...t, steps: newSteps, notes: newNotes, velocity: newVelocity };
+    });
+  }
+
+  function handleFillFromRange(sectionId: string, trackIndex: number, start: number, end: number) {
+    pushHistory();
+    const sec = pattern.sections.find((s) => s.id === sectionId);
+    if (!sec) return;
+    const t = sec.tracks[trackIndex];
+    const s = Math.min(start, end);
+    const e = Math.max(start, end);
+    const len = e - s + 1;
+    const srcSteps    = t.steps.slice(s, e + 1);
+    const srcNotes    = t.notes.slice(s, e + 1);
+    const srcVelocity = t.velocity.slice(s, e + 1);
+    updateTrack(sectionId, trackIndex, (track) => {
+      const newSteps    = [...track.steps];
+      const newNotes    = [...track.notes];
+      const newVelocity = [...track.velocity];
+      for (let i = e + 1; i < track.steps.length; i++) {
+        const j = (i - s) % len;
+        newSteps[i]    = srcSteps[j];
+        newNotes[i]    = srcNotes[j] ?? null;
+        newVelocity[i] = srcVelocity[j] ?? 1;
+      }
+      return { ...track, steps: newSteps, notes: newNotes, velocity: newVelocity };
+    });
+  }
+
   // ── Rename track ──────────────────────────────────────────────────────────
 
-  function handleRenameTrack(trackIndex: number, name: string) {
-    updateTrack(trackIndex, (t) => ({ ...t, name: name || undefined }));
+  function handleRenameTrack(sectionId: string, trackIndex: number, name: string) {
+    updateTrack(sectionId, trackIndex, (t) => ({ ...t, name: name || undefined }));
   }
 
   // ── Per-track probability ─────────────────────────────────────────────────
 
-  function handleChangeProbability(trackIndex: number, prob: number) {
-    updateTrack(trackIndex, (t) => ({
+  function handleChangeProbability(sectionId: string, trackIndex: number, prob: number) {
+    updateTrack(sectionId, trackIndex, (t) => ({
       ...t,
       probability: t.probability.map(() => prob),
     }));
@@ -563,15 +755,15 @@ export default function Home() {
 
   // ── Euclidean rhythm ──────────────────────────────────────────────────────
 
-  function handleApplyEuclidean(trackIndex: number, steps: boolean[]) {
+  function handleApplyEuclidean(sectionId: string, trackIndex: number, steps: boolean[]) {
     pushHistory();
-    updateTrack(trackIndex, (t) => ({
+    updateTrack(sectionId, trackIndex, (t) => ({
       ...t,
       steps: steps.slice(0, t.steps.length),
     }));
   }
 
-  // ── Drag-to-reorder ───────────────────────────────────────────────────────
+  // ── Drag-to-reorder (within a section) ───────────────────────────────────
 
   function handleDragStart(index: number) {
     dragIndexRef.current = index;
@@ -581,7 +773,7 @@ export default function Home() {
     setDragOver(index);
   }
 
-  function handleDragDrop(targetIndex: number) {
+  function handleDragDrop(sectionId: string, targetIndex: number) {
     const from = dragIndexRef.current;
     if (from === null || from === targetIndex) {
       dragIndexRef.current = null;
@@ -589,27 +781,28 @@ export default function Home() {
       return;
     }
     pushHistory();
-    setPattern((prev) => {
-      const tracks = [...prev.tracks];
+    updateSection(sectionId, (sec) => {
+      const tracks = [...sec.tracks];
       const [moved] = tracks.splice(from, 1);
       tracks.splice(targetIndex, 0, moved);
-      return { ...prev, tracks };
+      return { ...sec, tracks };
     });
     dragIndexRef.current = null;
     setDragOver(null);
   }
 
-  function handleRandomizeTrack(trackIndex: number) {
+  function handleRandomizeTrack(sectionId: string, trackIndex: number) {
+    const sec = pattern.sections.find((s) => s.id === sectionId);
+    if (!sec) return;
     pushHistory();
-    const track = pattern.tracks[trackIndex];
+    const track = sec.tracks[trackIndex];
     if (track.type === "melody") {
-      // Pick random notes from the current scale in the piano octave range
       const scaleMidi = getScaleMidiSet(pianoRoot, pianoScale);
       const lo = midiNoteNumber(pianoRoot, pianoOctave) - 12;
       const hi = midiNoteNumber(pianoRoot, pianoOctave) + 14;
       const pool = Array.from(scaleMidi).filter((m) => m >= lo && m <= hi);
       if (pool.length === 0) return;
-      updateTrack(trackIndex, (t) => {
+      updateTrack(sectionId, trackIndex, (t) => {
         const newSteps = t.steps.map(() => Math.random() < 0.3);
         const newNotes = newSteps.map((on) =>
           on ? pool[Math.floor(Math.random() * pool.length)] : null
@@ -617,13 +810,13 @@ export default function Home() {
         return { ...t, steps: newSteps, notes: newNotes };
       });
     } else {
-      updateTrack(trackIndex, (t) => ({ ...t, steps: t.steps.map(() => Math.random() < 0.3) }));
+      updateTrack(sectionId, trackIndex, (t) => ({ ...t, steps: t.steps.map(() => Math.random() < 0.3) }));
     }
   }
 
-  function handleToggleTrackType(trackIndex: number) {
+  function handleToggleTrackType(sectionId: string, trackIndex: number) {
     pushHistory();
-    updateTrack(trackIndex, (t) => ({
+    updateTrack(sectionId, trackIndex, (t) => ({
       ...t,
       type: t.type === "melody" ? "drum" : "melody",
     }));
@@ -642,8 +835,8 @@ export default function Home() {
     const engine = getEngine();
     await engine.resume();
     engine.playTone(noteFrequency(midi), 0.8, 1.5);
-    setSelectedNote(midi);   // arm this note for melody step painting
-    setSelectedChord(null);  // clear any armed chord
+    setSelectedNote(midi);
+    setSelectedChord(null);
     if (midiAccessRef.current && midiOutputIdRef.current) {
       sendMelodicNote(midiAccessRef.current, midiOutputIdRef.current, midi, 90, 500);
     }
@@ -656,7 +849,6 @@ export default function Home() {
     for (const midi of midiNotes) {
       engine.playTone(noteFrequency(midi), 0.6, 2.0);
     }
-    // Arm the chord for step painting
     setSelectedChord(midiNotes);
     setSelectedNote(null);
     if (midiAccessRef.current && midiOutputIdRef.current) {
@@ -676,90 +868,53 @@ export default function Home() {
     midiOutputIdRef.current = null;
   }
 
-  function handleGrooveLoad(patch: Pick<Pattern, "bpm" | "stepCount" | "tracks">) {
+  function handleGrooveLoad(patch: Pick<Pattern, "bpm" | "stepCount" | "sections">) {
     pushHistory();
-    setPattern((prev) => ({ ...prev, ...patch }));
+    setPattern((prev) => ({
+      ...prev,
+      bpm: patch.bpm,
+      stepCount: patch.stepCount,
+      sections: patch.sections,
+    }));
   }
+
+  // ── Add / remove sections ─────────────────────────────────────────────────
+
+  function handleAddSection() {
+    pushHistory();
+    const id = `section-custom-${Date.now()}`;
+    const newSection: InstrumentSection = {
+      id,
+      type: "custom",
+      name: "Custom",
+      color: SECTION_COLORS.custom,
+      vol: 1,
+      mute: false,
+      solo: false,
+      tracks: [{
+        id: `track-${Date.now()}`,
+        sampleId: "synth",
+        type: "melody",
+        vol: 0.8,
+        mute: false,
+        solo: false,
+        steps: Array(pattern.stepCount).fill(false) as boolean[],
+        notes: Array(pattern.stepCount).fill(null) as (number | null)[],
+        velocity: Array(pattern.stepCount).fill(1) as number[],
+        probability: Array(pattern.stepCount).fill(1) as number[],
+      }],
+    };
+    setPattern((prev) => ({ ...prev, sections: [...prev.sections, newSection] }));
+    setActiveTab(id);
+  }
+
+  // Derive active section — fallback to first section if activeTab is invalid/"mix"
+  const activeSection = pattern.sections.find((s) => s.id === activeTab) ?? pattern.sections[0] ?? null;
 
   return (
     <Container className="py-6 space-y-4">
 
-      {/* Easy / Advanced mode toggle — top of page, always visible */}
-      <div className={`flex items-center justify-between gap-3 rounded-xl border px-5 py-3 transition-colors ${
-        easyMode
-          ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800"
-          : "bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800"
-      }`}>
-        <div className="flex flex-col">
-          <span className={`text-sm font-bold ${
-            easyMode ? "text-emerald-700 dark:text-emerald-300" : "text-indigo-700 dark:text-indigo-300"
-          }`}>
-            {easyMode ? "🟢 Easy Mode" : "⚙️ Advanced Mode"}
-          </span>
-          <span className="text-xs text-ink-dim">
-            {easyMode ? "Simple beat making — great for getting started" : "Melody, swing, A/B patterns, chords & MIDI"}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setEasyMode((m) => !m)}
-          aria-pressed={easyMode}
-          className={`shrink-0 rounded-full border px-5 py-2 text-sm font-semibold transition-all active:scale-95 ${
-            easyMode
-              ? "bg-white dark:bg-emerald-900/40 border-emerald-400 dark:border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/60"
-              : "bg-white dark:bg-indigo-900/40 border-indigo-400 dark:border-indigo-600 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/60"
-          }`}
-        >
-          {easyMode ? "Switch to Advanced" : "Switch to Easy"}
-        </button>
-      </div>
-
-      {/* Groove presets — always shown */}
-      <Card>
-        <GroovePresets onLoad={handleGrooveLoad} />
-      </Card>
-
-      {/* Empty-state nudge — shown when no steps are active yet */}
-      {!pattern.tracks.some((t) => t.steps.some(Boolean)) && (
-        <div className="flex items-center gap-3 rounded-xl border border-dashed border-indigo-300 dark:border-indigo-700/60 bg-indigo-50/60 dark:bg-indigo-950/20 px-5 py-3 text-sm text-indigo-600 dark:text-indigo-400">
-          <span className="text-2xl" aria-hidden="true">🎶</span>
-          <div>
-            <span className="font-semibold">Pick a groove above to get started</span>
-            <span className="hidden sm:inline text-ink-dim">, or tap any step in the grid below to begin building your beat.</span>
-          </div>
-        </div>
-      )}
-
-      {/* Transport */}
-      <Card>
-        <Transport
-          isPlaying={isPlaying}
-          bpm={pattern.bpm}
-          masterVol={pattern.masterVol}
-          stepCount={pattern.stepCount}
-          swing={pattern.swing}
-          activeSlot={activeSlot}
-          easyMode={easyMode}
-          metronomeActive={metronomeActive}
-          humanize={pattern.humanize ?? 0}
-          onTogglePlay={handleTogglePlay}
-          onBpmChange={handleBpmChange}
-          onMasterVolChange={handleMasterVolChange}
-          onStepCountChange={handleStepCountChange}
-          onTapTempo={handleTapTempo}
-          onSwingChange={handleSwingChange}
-          onSlotChange={handleSlotChange}
-          onToggleMetronome={() => setMetronomeActive((m) => !m)}
-          chainActive={chainActive}
-          onToggleChain={() => {
-            setChainActive((c) => !c);
-            chainActiveRef.current = !chainActiveRef.current;
-          }}
-          onHumanizeChange={handleHumanizeChange}
-        />
-      </Card>
-
-      {/* Visualizer */}
+      {/* ── Visualizer ── */}
       <Card className="p-0 overflow-hidden">
         <Visualizer
           analyser={analyser}
@@ -769,33 +924,75 @@ export default function Home() {
         />
       </Card>
 
-      {/* Piano / Keyboard — advanced only */}
-      {!easyMode && (
-      <Card>
-        <PianoKeyboard
-          root={pianoRoot}
-          scale={pianoScale}
-          octave={pianoOctave}
-          selectedNote={selectedNote}
-          selectedChord={selectedChord}
-          activeNotes={playingNotes}
-          onRootChange={setPianoRoot}
-          onScaleChange={setPianoScale}
-          onOctaveChange={setPianoOctave}
-          onPlayNote={handlePlayNote}
-          onPlayChord={handlePlayChord}
-          onArmChord={(notes) => { setSelectedChord(notes.length ? notes : null); setSelectedNote(null); }}
+      {/* ── Controls + Mixer ── */}
+      <Card className="p-0">
+        {/* Stable header — Easy/Adv toggle always lives here */}
+        <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-rim">
+          <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">Controls</span>
+          <Tooltip content={easyMode ? "Switch to Advanced — unlocks melody, swing, MIDI & more" : "Switch to Easy mode"}>
+            <button
+              type="button"
+              onClick={() => setEasyMode((m) => !m)}
+              aria-pressed={!easyMode}
+              className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all active:scale-95 ${
+                easyMode
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                  : "border-indigo-500/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
+              }`}
+            >
+              {easyMode ? "🟢 Easy" : "⚙️ Advanced"}
+            </button>
+          </Tooltip>
+        </div>
+        <div className="px-4 py-3 border-b border-rim">
+          <Transport
+            isPlaying={isPlaying}
+            bpm={pattern.bpm}
+            masterVol={pattern.masterVol}
+            stepCount={pattern.stepCount}
+            swing={pattern.swing}
+            activeSlot={activeSlot}
+            easyMode={easyMode}
+            metronomeActive={metronomeActive}
+            humanize={pattern.humanize ?? 0}
+            onTogglePlay={handleTogglePlay}
+            onBpmChange={handleBpmChange}
+            onMasterVolChange={handleMasterVolChange}
+            onStepCountChange={handleStepCountChange}
+            onTapTempo={handleTapTempo}
+            onSwingChange={handleSwingChange}
+            onSlotChange={handleSlotChange}
+            onToggleMetronome={() => setMetronomeActive((m) => !m)}
+            chainActive={chainActive}
+            onToggleChain={() => {
+              setChainActive((c) => !c);
+              chainActiveRef.current = !chainActiveRef.current;
+            }}
+            onHumanizeChange={handleHumanizeChange}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-rim">
+          <span className="text-xs font-semibold uppercase tracking-widest text-ink-dim">Mixer</span>
+          <GroovePresets onLoad={handleGrooveLoad} compact />
+        </div>
+        <SectionMixer
+          sections={pattern.sections}
+          stepCount={pattern.stepCount}
+          currentStep={currentStep}
+          isPlaying={isPlaying}
+          activeTabId={activeTab}
+          onSelectSection={(id) => setActiveTab(id)}
+          onSectionMute={handleSectionMute}
+          onSectionSolo={handleSectionSolo}
+          onSectionVolChange={handleSectionVolChange}
         />
       </Card>
-      )}
 
-      {/* Step sequencer */}
+      {/* Step sequencer — tabbed by instrument section */}
       <Card className="p-0">
 
-        {/* ── Grid toolbar ── outside scroll, always fully visible ── */}
+        {/* ── Grid toolbar ── */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-rim">
-
-          {/* Edit history */}
           <Tooltip content="Undo last edit — shortcut: Ctrl+Z">
             <button
               type="button"
@@ -819,10 +1016,9 @@ export default function Home() {
             </button>
           </Tooltip>
 
-          {/* Divider */}
           <div className="h-4 w-px bg-rim shrink-0" aria-hidden="true" />
 
-          <Tooltip content="Erase all steps — your tracks, samples, and settings are kept">
+          <Tooltip content="Erase all steps — tracks, samples, and settings are kept">
             <button
               type="button"
               onClick={handleReset}
@@ -833,11 +1029,21 @@ export default function Home() {
             </button>
           </Tooltip>
 
-          {/* Push right-side controls to the right */}
+          <Tooltip content={pattern.stepCount >= 64 ? "Already at maximum 64 steps" : `Double to ${pattern.stepCount * 2} steps`}>
+            <button
+              type="button"
+              onClick={handleDoublePattern}
+              disabled={pattern.stepCount >= 64}
+              className="h-7 px-2.5 flex items-center gap-1 rounded text-xs font-medium transition-colors text-ink-dim hover:text-amber-400 hover:bg-well disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Double pattern length"
+            >
+              <span aria-hidden="true">×2</span> Double
+            </button>
+          </Tooltip>
+
           <div className="flex-1" />
 
-          {/* Teach Me toggle */}
-          <Tooltip content={teachMode ? "Hide notation — turn off Teach Me mode" : "Teach Me — see note values (quarter, eighth…) below each track"}>
+          <Tooltip content={teachMode ? "Hide notation" : "Teach Me — see note values below each track"}>
             <button
               type="button"
               onClick={() => setTeachMode((t) => !t)}
@@ -847,176 +1053,148 @@ export default function Home() {
                   : "text-ink-dim hover:text-ink hover:bg-well"
               }`}
               aria-pressed={teachMode}
-              aria-label={teachMode ? "Turn off Teach Me" : "Turn on Teach Me"}
             >
               <span aria-hidden="true">🎓</span>
               Teach Me
             </button>
           </Tooltip>
 
-          {/* Divider */}
           <div className="h-4 w-px bg-rim shrink-0" aria-hidden="true" />
 
-          {/* Sound pack switcher */}
           <SoundPackSwitcher
             currentPackId={soundPackId}
             loading={soundPackLoading}
             onSwitch={handleSoundPackSwitch}
           />
 
-          {/* Divider */}
           <div className="h-4 w-px bg-rim shrink-0" aria-hidden="true" />
 
-          {/* Loop range toggle */}
           <Tooltip content={loopRange
-            ? `Only steps ${loopRange[0] + 1}–${loopRange[1] + 1} will play. Click step numbers below to drag the range. Click Loop again to turn off.`
-            : "Loop range — make only a portion of steps play, great for testing one bar at a time"}>
+            ? `Only steps ${loopRange[0] + 1}–${loopRange[1] + 1} will play. Click Loop to turn off.`
+            : "Loop range — play only a portion of steps"}>
             <button
               type="button"
-              onClick={() => setLoopRange(loopRange
-                ? null
-                : [0, Math.min(7, pattern.stepCount - 1)])}
+              onClick={() => setLoopRange(loopRange ? null : [0, Math.min(7, pattern.stepCount - 1)])}
               className={`h-7 px-3 flex items-center gap-1.5 rounded text-xs font-semibold transition-colors ${
                 loopRange
                   ? "text-indigo-300 bg-indigo-500/20 hover:bg-indigo-500/30 ring-1 ring-indigo-500/40"
                   : "text-ink-dim hover:text-ink hover:bg-well"
               }`}
               aria-pressed={!!loopRange}
-              aria-label={loopRange ? `Loop range active: steps ${loopRange[0]+1}–${loopRange[1]+1}, click to clear` : "Turn on loop range"}
             >
               <span aria-hidden="true">⟳</span>
-              {loopRange
-                ? `Loop: ${loopRange[0] + 1}–${loopRange[1] + 1}`
-                : "Loop range"}
+              {loopRange ? `Loop: ${loopRange[0] + 1}–${loopRange[1] + 1}` : "Loop range"}
             </button>
           </Tooltip>
         </div>
 
-        {/* Loop active hint */}
         {loopRange && (
           <div className="px-3 py-1.5 flex items-center gap-2 bg-indigo-500/5 border-b border-indigo-500/20 text-xs text-indigo-400">
             <span aria-hidden="true">💡</span>
             Playing steps <strong>{loopRange[0] + 1}–{loopRange[1] + 1}</strong> only.
-            Click any step number below to move the loop edges.
+            Click any step number to move the loop edges.
           </div>
         )}
 
+        {/* ── Instrument tabs ── */}
+        <InstrumentTabs
+          sections={pattern.sections}
+          activeTabId={activeTab}
+          onTabChange={setActiveTab}
+          onAddSection={handleAddSection}
+        />
+
+        {/* ── Tab content ── */}
         <div className="overflow-x-auto">
-        <div className="min-w-max">
-          {/* Step number header */}
-          <div className="flex items-center gap-3 px-2 py-1.5 border-b border-rim">
-            {/* Spacer that matches the drag handle column (hidden on mobile like the handle) */}
-            <div className="hidden sm:block w-5 shrink-0" aria-hidden="true" />
-            {/* Spacer matching track controls column */}
-            <div className="w-48 min-w-48 sm:w-60 sm:min-w-60 shrink-0" aria-hidden="true" />
-            <div className="flex gap-1">
-              {Array.from({ length: pattern.stepCount }, (_, i) => (
-                <React.Fragment key={i}>
-                  {i > 0 && i % 4 === 0 && <div className="w-1 sm:w-1.5 shrink-0" aria-hidden="true" />}
-                  <div className="w-7 min-w-7 sm:w-8 sm:min-w-8 shrink-0 flex flex-col items-center gap-px">
-                    {/* Playhead pip / loop range indicator */}
-                    <div className={`h-1 w-full rounded-sm transition-colors duration-75 ${
-                      isPlaying && currentStep === i
-                        ? "bg-emerald-400 shadow-[0_0_5px_1px_#34d399]"
-                        : loopRange && i >= loopRange[0] && i <= loopRange[1]
-                          ? "bg-indigo-500/50"
-                          : "bg-transparent"
-                    }`} aria-hidden="true" />
-                    {/* Step number — clickable when loop range is active to adjust endpoints */}
-                    <span
-                      onClick={loopRange ? () => handleLoopStepClick(i) : undefined}
-                      className={`text-[9px] sm:text-[10px] font-mono select-none ${loopRange ? "cursor-pointer" : ""} ${
-                        isPlaying && currentStep === i
-                          ? "text-emerald-400 font-bold"
-                          : loopRange && i >= loopRange[0] && i <= loopRange[1]
-                            ? "text-indigo-400 font-semibold"
-                            : i % 4 === 3 ? "text-ink-dim" : "text-ink-ghost"
-                      }`}
-                    >
-                      {i % 4 === 3 ? i + 1 : "·"}
-                    </span>
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
-            <div className="w-16 shrink-0" />
+          <div className="min-w-max">
+            {activeSection ? (
+              <InstrumentEditor
+                section={activeSection}
+                stepCount={pattern.stepCount}
+                currentStep={currentStep}
+                isPlaying={isPlaying}
+                easyMode={easyMode}
+                selectedNote={selectedNote}
+                canPaste={!!clipboardTrack}
+                canPasteRange={!!stepRangeClipboard}
+                teachMode={teachMode}
+                loopRange={loopRange}
+                clipboardTrack={clipboardTrack}
+                dragOver={dragOver}
+                onDragStart={handleDragStart}
+                onDragEnter={handleDragEnter}
+                onDragDrop={(targetIdx) => handleDragDrop(activeSection.id, targetIdx)}
+                onDragEnd={() => setDragOver(null)}
+                onPaintStart={(trackIdx, step, value) => {
+                  pushHistory();
+                  const track = activeSection.tracks[trackIdx];
+                  if (track?.type === "melody") {
+                    handleSetMelodyStep(activeSection.id, trackIdx, step, value);
+                  } else {
+                    handleSetStep(activeSection.id, trackIdx, step, value);
+                  }
+                }}
+                onPaint={(trackIdx, step, value) => {
+                  const track = activeSection.tracks[trackIdx];
+                  if (track?.type === "melody") {
+                    handleSetMelodyStep(activeSection.id, trackIdx, step, value);
+                  } else {
+                    handleSetStep(activeSection.id, trackIdx, step, value);
+                  }
+                }}
+                onVelocityChange={(ti, step, vel) => handleVelocityChange(activeSection.id, ti, step, vel)}
+                onChangeSample={(ti, sampleId) => handleChangeSample(activeSection.id, ti, sampleId)}
+                onChangeVol={(ti, vol) => handleChangeVol(activeSection.id, ti, vol)}
+                onChangeProbability={(ti, prob) => handleChangeProbability(activeSection.id, ti, prob)}
+                onToggleMute={(ti) => handleToggleMute(activeSection.id, ti)}
+                onToggleSolo={(ti) => handleToggleSolo(activeSection.id, ti)}
+                onToggleType={(ti) => handleToggleTrackType(activeSection.id, ti)}
+                onClear={(ti) => handleClearTrack(activeSection.id, ti)}
+                onRandomize={(ti) => handleRandomizeTrack(activeSection.id, ti)}
+                onCopy={(ti) => handleCopyTrack(activeSection.id, ti)}
+                onPaste={(ti) => handlePasteTrack(activeSection.id, ti)}
+                onRemove={(ti) => handleRemoveTrack(activeSection.id, ti)}
+                onRename={(ti, name) => handleRenameTrack(activeSection.id, ti, name)}
+                onEuclidean={(ti) => setEuclidTrack({ sectionId: activeSection.id, trackIndex: ti })}
+                onPreviewSample={(sampleId) => getEngine().previewSample(sampleId)}
+                onOctaveOffsetChange={(ti, offset) => handleOctaveOffsetChange(activeSection.id, ti, offset)}
+                onColorChange={(ti, color) => handleColorChange(activeSection.id, ti, color)}
+                onDuplicate={(ti) => handleDuplicateTrack(activeSection.id, ti)}
+                onShiftLeft={(ti) => handleShiftTrack(activeSection.id, ti, -1)}
+                onShiftRight={(ti) => handleShiftTrack(activeSection.id, ti, 1)}
+                onCopyRange={(ti, start, end) => handleCopyRange(activeSection.id, ti, start, end)}
+                onPasteRange={(ti, at) => handlePasteRange(activeSection.id, ti, at)}
+                onFillFromRange={(ti, start, end) => handleFillFromRange(activeSection.id, ti, start, end)}
+                onAddTrack={() => handleAddTrack(activeSection.id)}
+                onFocusTrack={setFocusedTrack}
+                sectionType={activeSection.type}
+              />
+            ) : null}
           </div>
+        </div>
 
-          {/* Track rows */}
-          {pattern.tracks.map((track, i) => (
-            <div
-              key={track.id}
-              draggable
-              onDragStart={() => handleDragStart(i)}
-              onDragOver={(e) => { e.preventDefault(); handleDragEnter(i); }}
-              onDrop={() => handleDragDrop(i)}
-              onDragEnd={() => setDragOver(null)}
-              className={dragOver === i ? "outline outline-2 outline-indigo-400/60 rounded-lg" : ""}
-            >
-              <TrackRow
-              key={track.id}
-              track={track}
-              trackIndex={i}
-              currentStep={currentStep}
-              isPlaying={isPlaying}
-              trackColor={track.color ?? TRACK_COLORS[i % TRACK_COLORS.length]}
+        {/* Piano keyboard — shown for melody sections (piano, bass, synth, custom) */}
+        {activeSection && activeSection.type !== "drums" && (
+          <div className="border-t border-rim">
+            <PianoKeyboard
+              root={pianoRoot}
+              scale={pianoScale}
+              octave={pianoOctave}
               selectedNote={selectedNote}
-              easyMode={easyMode}
-              canPaste={!!clipboardTrack}
-              teachMode={teachMode}
-              stepCount={pattern.stepCount}
-              onDragHandlePointerDown={() => handleDragStart(i)}
-              onPaintStart={(step, value) => {
-                pushHistory();
-                if (track.type === "melody") {
-                  handleSetMelodyStep(i, step, value);
-                } else {
-                  handleSetStep(i, step, value);
-                }
-              }}
-              onPaint={(step, value) => {
-                if (track.type === "melody") {
-                  handleSetMelodyStep(i, step, value);
-                } else {
-                  handleSetStep(i, step, value);
-                }
-              }}
-              onVelocityChange={(step, velocity) => handleVelocityChange(i, step, velocity)}
-              onChangeSample={(sampleId) => handleChangeSample(i, sampleId)}
-              onChangeVol={(vol) => handleChangeVol(i, vol)}
-              onChangeProbability={(prob) => handleChangeProbability(i, prob)}
-              onToggleMute={() => handleToggleMute(i)}
-              onToggleSolo={() => handleToggleSolo(i)}
-              onToggleType={() => handleToggleTrackType(i)}
-              onClear={() => handleClearTrack(i)}
-              onRandomize={() => handleRandomizeTrack(i)}
-              onCopy={() => handleCopyTrack(i)}
-              onPaste={() => handlePasteTrack(i)}
-              onRemove={pattern.tracks.length > 1 ? () => handleRemoveTrack(i) : undefined}
-              onRename={(name) => handleRenameTrack(i, name)}
-              onEuclidean={() => setEuclidTrack(i)}
-              onPreviewSample={(sampleId) => getEngine().previewSample(sampleId)}
-              onOctaveOffsetChange={(offset) => handleOctaveOffsetChange(i, offset)}
-              onColorChange={(color) => handleColorChange(i, color)}
+              selectedChord={selectedChord}
+              activeNotes={playingNotes}
+              onRootChange={setPianoRoot}
+              onScaleChange={setPianoScale}
+              onOctaveChange={setPianoOctave}
+              onPlayNote={handlePlayNote}
+              onPlayChord={handlePlayChord}
+              onArmChord={(notes) => { setSelectedChord(notes.length ? notes : null); setSelectedNote(null); }}
             />
-            </div>
-          ))}
+          </div>
+        )}
+      </Card>
 
-          {/* Add track button */}
-          {pattern.tracks.length < 16 && (
-            <div className="px-2 py-2 border-t border-rim">
-              <button
-                type="button"
-                onClick={handleAddTrack}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-ink-dim border border-dashed border-rim hover:border-indigo-500/50 hover:text-indigo-400 hover:bg-well transition-colors"
-              >
-                <span className="text-base leading-none">+</span> Add Track
-              </button>
-            </div>
-          )}
-        </div>        </div>      </Card>
-
-      {/* Record + Session — always shown */}
+      {/* Record + Session */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <RecordPanel getMediaStream={() => getEngine().getMediaStream()} />
@@ -1029,18 +1207,20 @@ export default function Home() {
             redoStackRef.current = [];
             setCanUndo(false);
             setCanRedo(false);
+            // Reset active tab to first section
+            if (p.sections.length > 0) setActiveTab(p.sections[0].id);
           }} />
         </Card>
       </div>
 
       {/* MIDI — advanced only */}
       {!easyMode && (
-      <Card>
-        <MidiPanel
-          onAccessReady={handleMidiReady}
-          onAccessCleared={handleMidiCleared}
-        />
-      </Card>
+        <Card>
+          <MidiPanel
+            onAccessReady={handleMidiReady}
+            onAccessCleared={handleMidiCleared}
+          />
+        </Card>
       )}
 
       {!initialized && (
@@ -1049,7 +1229,6 @@ export default function Home() {
         </p>
       )}
 
-      {/* Auto-save toast */}
       {autoSavedAt && (
         <div
           key={autoSavedAt}
@@ -1060,12 +1239,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* Euclidean rhythm dialog */}
       {euclidTrack !== null && (
         <EuclideanDialog
           stepCount={pattern.stepCount}
           onApply={(steps) => {
-            handleApplyEuclidean(euclidTrack, steps);
+            handleApplyEuclidean(euclidTrack.sectionId, euclidTrack.trackIndex, steps);
             setEuclidTrack(null);
           }}
           onClose={() => setEuclidTrack(null)}

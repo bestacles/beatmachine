@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef } from "react";
-import { type TrackState } from "@/lib/pattern";
+import { type TrackState, type SectionType } from "@/lib/pattern";
 import { NOTE_NAMES } from "@/lib/scales";
 import { SampleSelect } from "./SampleSelect";
 import { StepGrid } from "./StepGrid";
@@ -25,6 +25,8 @@ interface TrackRowProps {
   canPaste?: boolean;
   /** Called when the drag handle is pointerdown — parent manages reorder */
   onDragHandlePointerDown?: (e: React.PointerEvent) => void;
+  /** Filters the sample picker to only show sounds relevant to this section type */
+  sectionType?: SectionType;
   onPaintStart: (step: number, value: boolean) => void;
   onPaint: (step: number, value: boolean) => void;
   onVelocityChange: (step: number, velocity: number) => void;
@@ -46,6 +48,17 @@ interface TrackRowProps {
   onColorChange?: (color: string) => void;
   teachMode?: boolean;
   stepCount?: number;
+  /** Duplicate this track (inserts a copy immediately below) */
+  onDuplicate?: () => void;
+  /** Rotate all steps one position to the left (wraps) */
+  onShiftLeft?: () => void;
+  /** Rotate all steps one position to the right (wraps) */
+  onShiftRight?: () => void;
+  /** True when the step-range clipboard has content to paste */
+  canPasteRange?: boolean;
+  onCopyRange?: (start: number, end: number) => void;
+  onPasteRange?: (at: number) => void;
+  onFillFromRange?: (start: number, end: number) => void;
 }
 
 export function TrackRow({
@@ -57,6 +70,7 @@ export function TrackRow({
   selectedNote,
   easyMode = false,
   canPaste = false,
+  sectionType,
   onDragHandlePointerDown,
   onPaintStart,
   onPaint,
@@ -79,11 +93,20 @@ export function TrackRow({
   onColorChange,
   teachMode = false,
   stepCount,
+  onDuplicate,
+  onShiftLeft,
+  onShiftRight,
+  canPasteRange = false,
+  onCopyRange,
+  onPasteRange,
+  onFillFromRange,
 }: TrackRowProps) {
   const isMelody = track.type === "melody";
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(track.name ?? "");
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selection, setSelection] = useState<[number, number] | null>(null);
 
   // Build note labels for melody steps
   const noteLabels = isMelody
@@ -138,6 +161,10 @@ export function TrackRow({
             aria-label="Change track color"
           />
         </Tooltip>
+
+        {/* Mute / Solo — front of track */}
+        <Toggle pressed={track.mute} onToggle={onToggleMute} label="M" variant="mute" tooltip={track.mute ? "Unmute this track" : "Mute this track"} />
+        <Toggle pressed={track.solo} onToggle={onToggleSolo} label="S" variant="solo" tooltip={track.solo ? "Unsolo" : "Solo — mute all other tracks"} />
 
         {/* Track number / inline rename */}
         {editingName ? (
@@ -221,6 +248,7 @@ export function TrackRow({
               <SampleSelect
                 value={track.sampleId}
                 trackIndex={trackIndex}
+                sectionType={sectionType}
                 onChange={(sampleId) => {
                   onChangeSample(sampleId);
                   onPreviewSample?.(sampleId);
@@ -255,7 +283,41 @@ export function TrackRow({
           onVelocityChange={onVelocityChange}
           noteLabels={noteLabels}
           velocities={track.velocity}
+          selection={selection}
+          selectionMode={selectionMode}
+          onRangeSelect={(start, end) => setSelection([start, end])}
         />
+        {/* Range selection action bar */}
+        {selectionMode && selection && (
+          <div className="flex items-center gap-1 pt-1 flex-wrap">
+            <span className="text-[10px] font-mono text-sky-400 shrink-0">
+              steps {selection[0] + 1}–{selection[1] + 1}
+            </span>
+            <button
+              type="button"
+              onClick={() => { onCopyRange?.(selection[0], selection[1]); }}
+              className="h-5 px-1.5 rounded text-[10px] font-medium bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 transition-colors"
+            >Copy</button>
+            {canPasteRange && (
+              <button
+                type="button"
+                onClick={() => { onPasteRange?.(selection[0]); }}
+                className="h-5 px-1.5 rounded text-[10px] font-medium bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors"
+              >Paste here</button>
+            )}
+            <button
+              type="button"
+              onClick={() => { onFillFromRange?.(selection[0], selection[1]); }}
+              className="h-5 px-1.5 rounded text-[10px] font-medium bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition-colors"
+            >Fill →</button>
+            <button
+              type="button"
+              onClick={() => setSelection(null)}
+              className="h-5 w-5 flex items-center justify-center rounded text-[10px] text-ink-ghost hover:text-rose-400 hover:bg-well transition-colors"
+              aria-label="Clear selection"
+            >✕</button>
+          </div>
+        )}
         {teachMode && (
           <NotationStrip
             steps={track.steps}
@@ -266,11 +328,8 @@ export function TrackRow({
         )}
       </div>
 
-      {/* Per-track volume + M/S + quick actions */}
+      {/* Per-track volume + quick actions */}
       <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-        {/* Mute / Solo — always visible, moved here so they aren't squeezed on mobile */}
-        <Toggle pressed={track.mute} onToggle={onToggleMute} label="M" variant="mute" tooltip={track.mute ? "Unmute this track" : "Mute this track"} />
-        <Toggle pressed={track.solo} onToggle={onToggleSolo} label="S" variant="solo" tooltip={track.solo ? "Unsolo" : "Solo — mute all other tracks"} />
         <Tooltip content={`Track volume: ${Math.round(track.vol * 100)}%`}>
           <input
             type="range"
@@ -322,6 +381,40 @@ export function TrackRow({
             ⚄
           </button>
         </Tooltip>
+
+        {/* Shift steps left/right (rotate) — desktop only */}
+        <Tooltip content="Shift all steps one position left (wraps around)">
+          <button
+            type="button"
+            onClick={onShiftLeft}
+            className="hidden sm:flex h-6 w-6 items-center justify-center rounded text-ink-ghost hover:text-amber-400 hover:bg-well text-xs transition-colors shrink-0"
+            aria-label="Shift steps left"
+          >←</button>
+        </Tooltip>
+        <Tooltip content="Shift all steps one position right (wraps around)">
+          <button
+            type="button"
+            onClick={onShiftRight}
+            className="hidden sm:flex h-6 w-6 items-center justify-center rounded text-ink-ghost hover:text-amber-400 hover:bg-well text-xs transition-colors shrink-0"
+            aria-label="Shift steps right"
+          >→</button>
+        </Tooltip>
+
+        {/* Range-select mode toggle */}
+        <Tooltip content={selectionMode ? "Exit selection mode" : "Select a range of steps to copy, paste or fill"}>
+          <button
+            type="button"
+            onClick={() => { setSelectionMode((m) => !m); if (selectionMode) setSelection(null); }}
+            className={`h-6 w-6 flex items-center justify-center rounded text-xs transition-colors shrink-0 ${
+              selectionMode
+                ? "text-sky-300 bg-sky-500/20 ring-1 ring-sky-500/40"
+                : "text-ink-ghost hover:text-sky-400 hover:bg-well"
+            }`}
+            aria-label={selectionMode ? "Exit selection mode" : "Select range"}
+            aria-pressed={selectionMode}
+          >▣</button>
+        </Tooltip>
+
         <Tooltip content="Copy this track's pattern">
           <button
             type="button"
@@ -342,6 +435,16 @@ export function TrackRow({
             >
               ⤵
             </button>
+          </Tooltip>
+        )}
+        {onDuplicate && (
+          <Tooltip content="Duplicate this track — inserts a copy below">
+            <button
+              type="button"
+              onClick={onDuplicate}
+              className="hidden sm:flex h-6 w-6 items-center justify-center rounded text-ink-ghost hover:text-indigo-400 hover:bg-well text-xs transition-colors shrink-0"
+              aria-label="Duplicate track"
+            >⎘</button>
           </Tooltip>
         )}
         <Tooltip content="Clear — erase all steps on this track">

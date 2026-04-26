@@ -87,7 +87,7 @@ function melodyEvents(track: TrackState, channel: number): MidiEvent[] {
 }
 
 export function exportPatternMidi(pattern: Pattern, filename = "groove.mid"): void {
-  const active = pattern.tracks.filter((t) => t.steps.some(Boolean));
+  const active = pattern.sections.flatMap((s) => s.tracks).filter((t) => t.steps.some(Boolean));
   const numTracks = 1 + active.length; // tempo track + data tracks
 
   // Header chunk

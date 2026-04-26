@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
 interface TooltipProps {
@@ -11,50 +13,66 @@ interface TooltipProps {
 }
 
 /**
- * Lightweight CSS-only tooltip wrapper.
- * Wraps any element and shows a styled bubble on hover via Tailwind `group-hover`.
- *
- * Usage:
- *   <Tooltip content="Some help text">
- *     <button>…</button>
- *   </Tooltip>
+ * Portal-based tooltip — renders into document.body so it's never clipped
+ * by parent overflow containers.
  */
 export function Tooltip({ content, children, position = "top", className }: TooltipProps) {
-  const isRight = position === "right";
+  const [visible, setVisible] = useState(false);
+  const [style, setStyle] = useState<React.CSSProperties>({});
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const computeStyle = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const GAP = 6;
+    if (position === "right") {
+      setStyle({
+        position: "fixed",
+        top: rect.top + rect.height / 2,
+        left: rect.right + GAP,
+        transform: "translateY(-50%)",
+      });
+    } else if (position === "bottom") {
+      setStyle({
+        position: "fixed",
+        top: rect.bottom + GAP,
+        left: rect.left + rect.width / 2,
+        transform: "translateX(-50%)",
+      });
+    } else {
+      setStyle({
+        position: "fixed",
+        top: rect.top - GAP,
+        left: rect.left + rect.width / 2,
+        transform: "translateX(-50%) translateY(-100%)",
+      });
+    }
+  }, [position]);
+
   return (
-    <div className={cn("relative group inline-flex items-center", className)}>
+    <div
+      ref={triggerRef}
+      className={cn("relative inline-flex items-center", className)}
+      onMouseEnter={() => { computeStyle(); setVisible(true); }}
+      onMouseLeave={() => setVisible(false)}
+      onFocus={() => { computeStyle(); setVisible(true); }}
+      onBlur={() => setVisible(false)}
+    >
       {children}
-      <div
-        role="tooltip"
-        className={cn(
-          // Base styles
-          "absolute z-50 px-2 py-1 text-[11px] font-medium leading-snug",
-          "text-white bg-zinc-900 dark:bg-zinc-700 rounded-md shadow-lg",
-          // Keep it above pointer events and non-selectable
-          "whitespace-nowrap pointer-events-none select-none",
-          // Visibility
-          "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
-          // Placement
-          isRight
-            ? "left-[calc(100%+6px)] top-1/2 -translate-y-1/2"
-            : "left-1/2 -translate-x-1/2",
-          !isRight && (position === "top" ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]"),
-        )}
-      >
-        {content}
-        {/* Arrow */}
-        <span
-          className={cn(
-            "absolute left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent",
-            isRight
-              ? "hidden"
-              : position === "top"
-                ? "top-full border-t-4 border-t-zinc-900 dark:border-t-zinc-700"
-                : "bottom-full border-b-4 border-b-zinc-900 dark:border-b-zinc-700",
-          )}
-          aria-hidden="true"
-        />
-      </div>
+      {mounted && visible && createPortal(
+        <div
+          role="tooltip"
+          style={{ ...style, zIndex: 9999 }}
+          className="px-2 py-1 text-[11px] font-medium leading-snug text-white bg-zinc-900 dark:bg-zinc-700 rounded-md shadow-lg whitespace-nowrap pointer-events-none select-none"
+        >
+          {content}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
+

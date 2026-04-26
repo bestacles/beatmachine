@@ -310,7 +310,7 @@ export function Transport({
         {/* Mobile-only: expand toggle */}
         <button
           type="button"
-          className="sm:hidden ml-auto rounded-lg border border-rim px-3 py-1.5 text-xs font-semibold text-ink-dim hover:text-ink hover:bg-well transition-colors"
+          className="sm:hidden rounded-lg border border-rim px-3 py-1.5 text-xs font-semibold text-ink-dim hover:text-ink hover:bg-well transition-colors"
           onClick={() => setMobileExpanded((e) => !e)}
           aria-expanded={mobileExpanded}
           aria-label={mobileExpanded ? "Hide extra controls" : "Show more controls"}

@@ -23,6 +23,29 @@ export interface TrackState {
   color?: string;
 }
 
+/** The instrument category for a section */
+export type SectionType = "drums" | "piano" | "bass" | "synth" | "custom";
+
+export interface InstrumentSection {
+  id: string;
+  type: SectionType;
+  /** User-editable display name */
+  name: string;
+  /** Hex accent color for the section tab */
+  color: string;
+  /** Section-level volume applied on top of individual track volumes */
+  vol: number;
+  mute: boolean;
+  solo: boolean;
+  tracks: TrackState[];
+  /**
+   * Advanced mode: per-section step count override. When set the section
+   * loops at this length while the global stepCount is used by other sections.
+   * undefined = use the global pattern.stepCount.
+   */
+  sectionStepCount?: 8 | 16 | 32 | 64;
+}
+
 export interface Pattern {
   bpm: number;
   masterVol: number;
@@ -31,35 +54,186 @@ export interface Pattern {
   swing: number;
   /** 0 = robotic perfect timing, 100 = heavy human feel (timing + velocity variation) */
   humanize: number;
-  tracks: TrackState[];
+  sections: InstrumentSection[];
 }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 export const TRACK_COUNT = 8;
 export const STEP_COUNT = 16;
 
 export const DEFAULT_SAMPLES = ["kick", "snare", "hat", "clap", "tom", "perc", "bass", "synth"];
 
+/** Emoji icon per section type */
+export const SECTION_EMOJI: Record<SectionType, string> = {
+  drums:  "🥁",
+  piano:  "🎹",
+  bass:   "🎸",
+  synth:  "🎹",
+  custom: "🎵",
+};
+
+/** Default accent colors per section type */
+export const SECTION_COLORS: Record<SectionType, string> = {
+  drums:  "#f97316",
+  piano:  "#6366f1",
+  bass:   "#22c55e",
+  synth:  "#a855f7",
+  custom: "#64748b",
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function emptyTrack(id: string, sampleId: string, type: TrackState["type"], stepCount: number): TrackState {
+  return {
+    id,
+    sampleId,
+    type,
+    vol: 0.8,
+    mute: false,
+    solo: false,
+    steps: Array(stepCount).fill(false) as boolean[],
+    notes: Array(stepCount).fill(null) as (number | null)[],
+    velocity: Array(stepCount).fill(1) as number[],
+    probability: Array(stepCount).fill(1) as number[],
+  };
+}
+
+// ── Default pattern ───────────────────────────────────────────────────────────
+
 export function createDefaultPattern(): Pattern {
+  const sc = STEP_COUNT;
+  const drumSamples = ["kick", "snare", "hat", "clap", "tom", "perc", "open-hat", "crash"];
   return {
     bpm: 120,
     masterVol: 0.8,
-    stepCount: 16,
+    stepCount: sc,
     swing: 0,
     humanize: 0,
-    tracks: Array.from({ length: TRACK_COUNT }, (_, i) => ({
-      id: `track-${i}`,
-      sampleId: DEFAULT_SAMPLES[i] ?? "kick",
-      type: "drum" as const,
-      vol: 0.8,
-      mute: false,
-      solo: false,
-      steps: Array(STEP_COUNT).fill(false) as boolean[],
-      notes: Array(STEP_COUNT).fill(null) as (number | null)[],
-      velocity: Array(STEP_COUNT).fill(1) as number[],
-      probability: Array(STEP_COUNT).fill(1) as number[],
-    })),
+    sections: [
+      {
+        id: "section-drums",
+        type: "drums",
+        name: "Drums",
+        color: SECTION_COLORS.drums,
+        vol: 1,
+        mute: false,
+        solo: false,
+        tracks: drumSamples.map((s, i) => emptyTrack(`track-d${i}`, s, "drum", sc)),
+      },
+      {
+        id: "section-piano",
+        type: "piano",
+        name: "Piano",
+        color: SECTION_COLORS.piano,
+        vol: 1,
+        mute: false,
+        solo: false,
+        tracks: [
+          emptyTrack("track-p0", "synth", "melody", sc),
+          emptyTrack("track-p1", "chord", "melody", sc),
+        ],
+      },
+      {
+        id: "section-bass",
+        type: "bass",
+        name: "Bass",
+        color: SECTION_COLORS.bass,
+        vol: 1,
+        mute: false,
+        solo: false,
+        tracks: [emptyTrack("track-b0", "bass", "melody", sc)],
+      },
+      {
+        id: "section-synth",
+        type: "synth",
+        name: "Synth",
+        color: SECTION_COLORS.synth,
+        vol: 1,
+        mute: false,
+        solo: false,
+        tracks: [emptyTrack("track-s0", "synth", "melody", sc)],
+      },
+    ],
   };
 }
+
+// ── Migration: flat tracks[] → sections[] ─────────────────────────────────────
+
+const BASS_SAMPLES  = new Set(["bass", "sub"]);
+const SYNTH_SAMPLES = new Set(["chord", "synth"]);
+
+export function migrateTracksToSections(
+  tracks: TrackState[],
+  stepCount: number,
+): InstrumentSection[] {
+  const drumTracks:  TrackState[] = [];
+  const pianoTracks: TrackState[] = [];
+  const bassTracks:  TrackState[] = [];
+  const synthTracks: TrackState[] = [];
+
+  for (const t of tracks) {
+    if (BASS_SAMPLES.has(t.sampleId) || (t.type === "melody" && BASS_SAMPLES.has(t.sampleId))) {
+      bassTracks.push(t);
+    } else if (SYNTH_SAMPLES.has(t.sampleId)) {
+      synthTracks.push(t);
+    } else if (t.type === "melody") {
+      pianoTracks.push(t);
+    } else {
+      drumTracks.push(t);
+    }
+  }
+
+  function fallback(arr: TrackState[], sampleId: string, type: TrackState["type"]): TrackState[] {
+    if (arr.length > 0) return arr;
+    return [emptyTrack(`track-${Date.now()}-fb`, sampleId, type, stepCount)];
+  }
+
+  return [
+    {
+      id: "section-drums",
+      type: "drums",
+      name: "Drums",
+      color: SECTION_COLORS.drums,
+      vol: 1,
+      mute: false,
+      solo: false,
+      tracks: fallback(drumTracks, "kick", "drum"),
+    },
+    {
+      id: "section-piano",
+      type: "piano",
+      name: "Piano",
+      color: SECTION_COLORS.piano,
+      vol: 1,
+      mute: false,
+      solo: false,
+      tracks: fallback(pianoTracks, "synth", "melody"),
+    },
+    {
+      id: "section-bass",
+      type: "bass",
+      name: "Bass",
+      color: SECTION_COLORS.bass,
+      vol: 1,
+      mute: false,
+      solo: false,
+      tracks: fallback(bassTracks, "bass", "melody"),
+    },
+    {
+      id: "section-synth",
+      type: "synth",
+      name: "Synth",
+      color: SECTION_COLORS.synth,
+      vol: 1,
+      mute: false,
+      solo: false,
+      tracks: fallback(synthTracks, "synth", "melody"),
+    },
+  ];
+}
+
+// ── Serialize / deserialize ───────────────────────────────────────────────────
 
 export function serializePattern(pattern: Pattern): string {
   return JSON.stringify(pattern);
@@ -68,42 +242,75 @@ export function serializePattern(pattern: Pattern): string {
 export function deserializePattern(data: string): Pattern {
   try {
     const parsed = JSON.parse(data) as unknown;
-    if (!isPattern(parsed)) return createDefaultPattern();
-    // Back-compat: fill in fields added after initial release
-    const raw = parsed as unknown as Record<string, unknown>;
-    if (typeof raw.swing !== "number") raw.swing = 0;
-    if (typeof raw.humanize !== "number") raw.humanize = 0;
-    // Back-compat: stepCount may be missing from sessions saved before the field was added;
-    // infer it from the actual length of the first track's steps array.
-    if (typeof raw.stepCount !== "number" || ![8, 16, 32, 64].includes(raw.stepCount as number)) {
-      const firstTrack = (raw.tracks as Array<Record<string, unknown>>)?.[0];
-      const len = Array.isArray(firstTrack?.steps) ? (firstTrack.steps as unknown[]).length : 16;
-      raw.stepCount = ([8, 16, 32, 64] as number[]).includes(len) ? len : 16;
-    }
-    // Back-compat: ensure each track has type + notes fields
-    if (Array.isArray(raw.tracks)) {
-      raw.tracks = (raw.tracks as Array<Record<string, unknown>>).map((t) => ({
-        type: "drum",
-        notes: Array((t.steps as boolean[]).length).fill(null),
-        velocity: Array((t.steps as boolean[]).length).fill(1),
-        probability: Array((t.steps as boolean[]).length).fill(1),
-        ...t,
+    if (typeof parsed !== "object" || parsed === null) return createDefaultPattern();
+    const raw = parsed as Record<string, unknown>;
+
+    // Back-compat: fill in scalar fields added over time
+    if (typeof raw.swing     !== "number") raw.swing     = 0;
+    if (typeof raw.humanize  !== "number") raw.humanize  = 0;
+    if (typeof raw.masterVol !== "number") raw.masterVol = 0.8;
+    if (typeof raw.bpm       !== "number") raw.bpm       = 120;
+
+    // Determine step count
+    let stepCount: number = typeof raw.stepCount === "number" ? raw.stepCount : 16;
+    if (![8, 16, 32, 64].includes(stepCount)) stepCount = 16;
+    raw.stepCount = stepCount;
+
+    // ── NEW FORMAT: has sections[] ─────────────────────────────────────────
+    if (Array.isArray(raw.sections)) {
+      raw.sections = (raw.sections as Array<Record<string, unknown>>).map((sec) => ({
+        id:    sec.id    ?? `section-${Date.now()}`,
+        type:  sec.type  ?? "custom",
+        name:  sec.name  ?? "Section",
+        color: sec.color ?? SECTION_COLORS.custom,
+        vol:   typeof sec.vol === "number" ? sec.vol : 1,
+        mute:  Boolean(sec.mute),
+        solo:  Boolean(sec.solo),
+        tracks: Array.isArray(sec.tracks)
+          ? (sec.tracks as Array<Record<string, unknown>>).map((t) => ({
+              type:        "drum",
+              notes:       Array((t.steps as boolean[])?.length ?? stepCount).fill(null),
+              velocity:    Array((t.steps as boolean[])?.length ?? stepCount).fill(1),
+              probability: Array((t.steps as boolean[])?.length ?? stepCount).fill(1),
+              ...t,
+            }))
+          : [],
+        sectionStepCount: [8, 16, 32, 64].includes(sec.sectionStepCount as number)
+          ? sec.sectionStepCount
+          : undefined,
       }));
+      return raw as unknown as Pattern;
     }
-    return raw as unknown as Pattern;
+
+    // ── LEGACY FORMAT: has tracks[] — migrate to sections[] ───────────────
+    if (Array.isArray(raw.tracks)) {
+      // Back-compat: ensure each track has all required fields
+      const tracks = (raw.tracks as Array<Record<string, unknown>>).map((t) => ({
+        type:        "drum",
+        notes:       Array((t.steps as boolean[])?.length ?? stepCount).fill(null),
+        velocity:    Array((t.steps as boolean[])?.length ?? stepCount).fill(1),
+        probability: Array((t.steps as boolean[])?.length ?? stepCount).fill(1),
+        ...t,
+      })) as TrackState[];
+
+      // Infer stepCount from first track if not in header
+      if (tracks[0] && Array.isArray(tracks[0].steps)) {
+        const len = tracks[0].steps.length;
+        if ([8, 16, 32, 64].includes(len)) raw.stepCount = len;
+      }
+
+      raw.sections = migrateTracksToSections(tracks, raw.stepCount as number);
+      delete raw.tracks;
+      return raw as unknown as Pattern;
+    }
+
+    return createDefaultPattern();
   } catch {
     return createDefaultPattern();
   }
 }
 
-function isPattern(v: unknown): v is Pattern {
-  if (typeof v !== "object" || v === null) return false;
-  const p = v as Record<string, unknown>;
-  if (typeof p.bpm !== "number") return false;
-  if (typeof p.masterVol !== "number") return false;
-  if (!Array.isArray(p.tracks)) return false;
-  return true;
-}
+// ── Share URL ─────────────────────────────────────────────────────────────────
 
 export function encodeShareUrl(pattern: Pattern): string {
   const json = serializePattern(pattern);
@@ -122,6 +329,6 @@ export function decodeShareUrl(encoded: string): Pattern {
 
 export function buildShareLink(pattern: Pattern, baseUrl: string): string {
   const encoded = encodeShareUrl(pattern);
-  // Use hash fragment — never sent to server, works for static deployments
   return `${baseUrl}#s=${encoded}`;
 }
+

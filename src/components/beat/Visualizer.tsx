@@ -285,12 +285,21 @@ export function Visualizer({ analyser, mode, onSetMode, isPlaying }: VisualizerP
 
   return (
     <div>
-      <canvas
-        ref={canvasRef}
-        className="w-full block"
-        style={{ height: "120px" }}
-        aria-label="Audio visualizer"
-      />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          className="w-full block"
+          style={{ height: "120px" }}
+          aria-label="Audio visualizer"
+        />
+        {!isPlaying && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-xs font-medium text-ink-ghost tracking-widest uppercase select-none">
+              press play
+            </span>
+          </div>
+        )}
+      </div>
       <div className="flex items-center justify-between px-4 py-2 border-t border-rim">
         <span className="text-xs text-ink-dim">{MODE_LABELS[mode]}</span>
         <div className="flex gap-0.5 rounded-lg bg-well border border-rim p-0.5">
